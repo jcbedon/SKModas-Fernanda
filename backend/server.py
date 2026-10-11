@@ -580,6 +580,7 @@ class LiveModulePurchaseCreate(BaseModel):
     price: float
     commission_amount: Optional[float] = None  # empty => no commission
     customer_ids: List[str]
+    quantity: int = 1  # Number of items per client (default 1)
 
 class ShipmentCreate(BaseModel):
     user_id: str
@@ -5217,6 +5218,8 @@ async def create_live_module_purchases(data: LiveModulePurchaseCreate, current_u
     failed = []
     agg_sales = 0.0
     agg_comm = 0.0
+    quantity = max(1, data.quantity)  # Ensure at least 1
+    
     for raw_cid in data.customer_ids:
         cid = (raw_cid or "").upper().strip()
         if not cid:
@@ -5229,42 +5232,51 @@ async def create_live_module_purchases(data: LiveModulePurchaseCreate, current_u
         if not wallet:
             failed.append({"customer_id": cid, "reason": "Wallet no encontrada"})
             continue
-        purchase_dict = {
-            "id": str(uuid.uuid4()),
-            "tenant_id": tid,
-            "user_id": user["id"],
-            "customer_id": cid,
-            "item_name": data.item_name,
-            "store": data.store or live.get("store") or "",
-            "price": price,
-            "tax": tax,
-            "tax_rate": tax_rate,
-            "apply_tax": apply_tax,
-            "price_with_tax": price_with_tax,
-            "commission": commission_fee,
-            "apply_commission": commission_fee > 0,
-            "total": total,
-            "status": "confirmed",
-            "live_id": data.live_id,
-            "entry_source": "live",  # <-- mark: entered via the Live fast module
-            "created_at": now_iso,
-        }
-        await db.purchases.insert_one(purchase_dict)
-        new_balance = wallet["available"] - total
+        
+        # Create 'quantity' purchases for this client
+        for _ in range(quantity):
+            purchase_dict = {
+                "id": str(uuid.uuid4()),
+                "tenant_id": tid,
+                "user_id": user["id"],
+                "customer_id": cid,
+                "item_name": data.item_name,
+                "store": data.store or live.get("store") or "",
+                "price": price,
+                "tax": tax,
+                "tax_rate": tax_rate,
+                "apply_tax": apply_tax,
+                "price_with_tax": price_with_tax,
+                "commission": commission_fee,
+                "apply_commission": commission_fee > 0,
+                "total": total,
+                "status": "confirmed",
+                "live_id": data.live_id,
+                "entry_source": "live",  # <-- mark: entered via the Live fast module
+                "created_at": now_iso,
+            }
+            await db.purchases.insert_one(purchase_dict)
+            agg_sales += price_with_tax
+            agg_comm += commission_fee
+        
+        # Update wallet once with total for all items
+        total_for_client = total * quantity
+        new_balance = wallet["available"] - total_for_client
         await db.wallets.update_one({"user_id": user["id"], "tenant_id": tid},
             {"$set": {"available": new_balance, "updated_at": now_iso}})
+        
+        desc_qty = f" x{quantity}" if quantity > 1 else ""
         transaction = WalletTransaction(tenant_id=tid, user_id=user["id"], customer_id=cid,
-            type="purchase", amount=-total, balance_after=new_balance,
-            description=f"Compra (Live): {data.item_name} - Total: ${total:.2f}", status="approved",
+            type="purchase", amount=-total_for_client, balance_after=new_balance,
+            description=f"Compra (Live): {data.item_name}{desc_qty} - Total: ${total_for_client:.2f}", status="approved",
             approved_at=now_iso, purchase_id=purchase_dict["id"])
         await db.wallet_transactions.insert_one(transaction.model_dump())
-        agg_sales += price_with_tax
-        agg_comm += commission_fee
-        created.append({"customer_id": cid, "name": user.get("name"), "new_balance": round(new_balance, 2)})
+        created.append({"customer_id": cid, "name": user.get("name"), "new_balance": round(new_balance, 2), "quantity": quantity})
 
     if created:
+        total_items = len(created) * quantity
         await db.lives.update_one({"id": data.live_id, "tenant_id": tid},
-            {"$inc": {"total_sales": round(agg_sales, 2), "total_commissions": round(agg_comm, 2), "purchase_count": len(created)}})
+            {"$inc": {"total_sales": round(agg_sales, 2), "total_commissions": round(agg_comm, 2), "purchase_count": total_items}})
         # Save product name to history for autocomplete (name only).
         name_clean = data.item_name.strip()
         if name_clean:

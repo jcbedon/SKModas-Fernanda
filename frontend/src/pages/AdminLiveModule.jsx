@@ -48,7 +48,7 @@ export default function AdminLiveModule() {
   const [creating, setCreating] = useState(false);
 
   // Product form
-  const [product, setProduct] = useState({ item_name: "", price: "", commission: "" });
+  const [product, setProduct] = useState({ item_name: "", price: "", commission: "", quantity: 1 });
   const [history, setHistory] = useState([]);
 
   // Clients
@@ -225,7 +225,9 @@ export default function AdminLiveModule() {
 
   const priceNum = parseFloat(product.price) || 0;
   const commissionNum = product.commission === "" ? 0 : (parseFloat(product.commission) || 0);
-  const finalValue = priceNum + commissionNum;
+  const quantityNum = parseInt(product.quantity) || 1;
+  const unitValue = priceNum + commissionNum;
+  const finalValue = unitValue * quantityNum;
 
   const handleRegister = async () => {
     if (!selectedLive) { toast.error("Selecciona o crea un Live"); return; }
@@ -241,6 +243,7 @@ export default function AdminLiveModule() {
         price: priceNum,
         commission_amount: product.commission === "" ? null : commissionNum,
         customer_ids: selectedClients.map(c => c.customer_id),
+        quantity: parseInt(product.quantity) || 1,
       });
       const created = res.data?.created?.length || 0;
       const failed = res.data?.failed || [];
@@ -249,7 +252,7 @@ export default function AdminLiveModule() {
         toast.error(`${failed.length} no se registraron: ${failed.map(f => f.customer_id).join(", ")}`);
       }
       // Reset product + clients, keep live
-      setProduct({ item_name: "", price: "", commission: "" });
+      setProduct({ item_name: "", price: "", commission: "", quantity: 1 });
       setSelectedClients([]);
       refreshHistory();
       loadLives();
@@ -528,6 +531,12 @@ export default function AdminLiveModule() {
                     </div>
                   </div>
                   <div>
+                    <Label className="text-xs">Cant.</Label>
+                    <Input type="number" min="1" value={product.quantity}
+                      onChange={e => setProduct({ ...product, quantity: Math.max(1, parseInt(e.target.value) || 1) })}
+                      placeholder="1" className="h-11 rounded-lg text-center font-bold mt-1" data-testid="live-product-quantity" />
+                  </div>
+                  <div>
                     <Label className="text-xs">Comisión</Label>
                     <div className="relative mt-1">
                       <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -538,7 +547,9 @@ export default function AdminLiveModule() {
                     </div>
                   </div>
                   <div className="rounded-lg bg-slate-900 text-white px-3 py-2 text-center" data-testid="live-final-value">
-                    <p className="text-[10px] opacity-70 leading-tight">Valor final</p>
+                    <p className="text-[10px] opacity-70 leading-tight">
+                      {quantityNum > 1 ? `${quantityNum}x $${unitValue.toFixed(2)}` : 'Valor final'}
+                    </p>
                     <p className="text-lg font-bold leading-tight">${finalValue.toFixed(2)}</p>
                   </div>
                 </div>
@@ -630,7 +641,7 @@ export default function AdminLiveModule() {
                   data-testid="live-register-btn"
                 >
                   {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : (
-                    <>Registrar en {selectedClients.length} cliente(s) · ${(finalValue * selectedClients.length).toFixed(2)}</>
+                    <>Registrar {quantityNum > 1 ? `${quantityNum}x ` : ''}en {selectedClients.length} cliente(s) · ${(finalValue * selectedClients.length).toFixed(2)}</>
                   )}
                 </Button>
               </CardContent>
