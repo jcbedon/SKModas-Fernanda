@@ -9,8 +9,8 @@ import { User, Lock, Eye, EyeOff, ShoppingBag, Shield, Truck, Headphones } from 
 const WHATSAPP_USA = "+12019954770";
 const WHATSAPP_ECUADOR = "+593998541082";
 
-// Logo URL - Didier Shop 3D logo with transparent background
-const DIDIER_LOGO = "https://static.prod-images.emergentagent.com/jobs/783f5be0-cb6a-4591-926c-0e17259f2605/images/42acb353a15e0bab737c2077e538080c67be796200d751bd8035cae86b363d10.jpeg";
+// Logo URL - Didier Shop logo blanco con fondo transparente
+const DIDIER_LOGO = "https://customer-assets-v7afamib.emergentagent.net/job_783f5be0-cb6a-4591-926c-0e17259f2605/artifacts/a2c6d2e7ca48aeaa_Logo%20Didier%20Shop%20%28Blanco%29.png";
 
 // Video URL
 const PROMO_VIDEO = "https://customer-assets-v7afamib.emergentagent.net/job_783f5be0-cb6a-4591-926c-0e17259f2605/artifacts/dbb507bb65a16b55_Woman_holding_shopping_bags_smiling_20261010221028.mp4";
