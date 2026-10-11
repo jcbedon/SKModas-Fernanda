@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/App";
 import { getAllShipments, getTenantSettings, getAllClients, getInvoicesWithoutShipment, toggleShipmentGuideVerified } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -44,8 +45,12 @@ function getWeekLabel(weekKey) {
   return `Lunes ${fmt(start)} - Lunes ${fmt(end)}`;
 }
 
+const DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_compraenvivo/artifacts/qvyfsb43_WhatsApp%20Image%202026-02-03%20at%208.05.08%20PM.jpeg";
+
 export default function AdminPackagesReport() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const logoUrl = user?.tenant_logo || DEFAULT_LOGO;
   const [loading, setLoading] = useState(true);
   const [shipments, setShipments] = useState([]);
   const [clientsByCode, setClientsByCode] = useState({}); // customer_id (UPPER) -> name
@@ -304,32 +309,31 @@ export default function AdminPackagesReport() {
 
   return (
     <div className="app-bg min-h-screen pb-12">
-      <div className="max-w-5xl mx-auto p-4 sm:p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/admin")} data-testid="back-btn" className="rounded-xl">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-xl font-extrabold text-slate-800">Detalle de Paquetes</h1>
-              <p className="text-xs text-slate-500">Corte semanal: lunes 12:00 → lunes 12:00</p>
-            </div>
+      {/* Header */}
+      <div className="sticky top-0 z-50 border-b" style={{ background: 'rgba(255,255,255,0.95)', borderColor: '#E5E7EB' }}>
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => navigate("/admin")} data-testid="back-btn">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="bg-white rounded-lg p-1">
+            <img src={logoUrl} alt="Logo" className="h-10 object-contain logo-transparent" />
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={() => setVerifyDialogOpen(true)}
-              className="rounded-xl bg-orange-600 hover:bg-orange-700 text-white h-10 px-3 text-xs font-bold"
-              data-testid="open-verify-dialog-btn"
-            >
-              <ClipboardCheck className="h-4 w-4 mr-1.5" />
-              Verificar Paquetes vs Guías
-            </Button>
-            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
-              <Package className="h-5 w-5 text-orange-600" />
-            </div>
+          <span className="font-bold text-slate-800 flex-1">Detalle de Paquetes</span>
+          <Button
+            onClick={() => setVerifyDialogOpen(true)}
+            className="rounded-xl bg-orange-600 hover:bg-orange-700 text-white h-9 px-3 text-xs font-bold"
+            data-testid="open-verify-dialog-btn"
+          >
+            <ClipboardCheck className="h-4 w-4 mr-1.5" />
+            Verificar
+          </Button>
+          <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+            <Package className="h-5 w-5 text-orange-600" />
           </div>
         </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto p-4 sm:p-6">
 
         {/* Filters */}
         <Card className="rounded-2xl border-slate-100 mb-4">

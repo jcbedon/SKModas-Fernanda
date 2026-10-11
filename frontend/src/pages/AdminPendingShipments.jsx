@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/App";
 import { getInvoicesWithoutShipment } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -42,8 +43,12 @@ function getWeekLabelShort(weekKey) {
   return `${start.getDate()} ${monthShort(start)}–${end.getDate()} ${monthShort(end)}`;
 }
 
+const DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_compraenvivo/artifacts/qvyfsb43_WhatsApp%20Image%202026-02-03%20at%208.05.08%20PM.jpeg";
+
 export default function AdminPendingShipments() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const logoUrl = user?.tenant_logo || DEFAULT_LOGO;
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({ clients: [], invoices_count: 0, clients_count: 0 });
   const [filter, setFilter] = useState("");
@@ -149,22 +154,23 @@ export default function AdminPendingShipments() {
 
   return (
     <div className="app-bg min-h-screen pb-12">
-      <div className="max-w-3xl mx-auto p-4 sm:p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/admin")} data-testid="back-btn" className="rounded-xl">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-xl font-extrabold text-slate-800">Envíos Pendientes</h1>
-              <p className="text-xs text-slate-500">Corte semanal: lunes 12:00 → lunes 12:00</p>
-            </div>
+      {/* Header */}
+      <div className="sticky top-0 z-50 border-b" style={{ background: 'rgba(255,255,255,0.95)', borderColor: '#E5E7EB' }}>
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => navigate("/admin")} data-testid="back-btn">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="bg-white rounded-lg p-1">
+            <img src={logoUrl} alt="Logo" className="h-10 object-contain logo-transparent" />
           </div>
+          <span className="font-bold text-slate-800 flex-1">Envíos Pendientes</span>
           <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
             <Truck className="h-5 w-5 text-purple-600" />
           </div>
         </div>
+      </div>
+
+      <div className="max-w-3xl mx-auto p-4 sm:p-6">
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-3 mb-4">
