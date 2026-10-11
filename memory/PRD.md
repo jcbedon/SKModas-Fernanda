@@ -13,6 +13,17 @@ Multi-tenant SaaS para personal shoppers con live shopping, wallets, facturació
 - PDFs: jsPDF · Object Store: Emergent internal
 
 ## Changelog (Oct 2026)
+- **[11-oct-2026]** **Rediseño completo de la página de login (Didier Shop)**:
+  - Nuevo diseño elegante con fondo negro satinado (#08090B) y líneas luminosas rosa suave.
+  - Video promocional con controles personalizados (play/pause, mute, seek, fullscreen).
+  - Formulario de login con efecto glassmorphism, borde rosa luminoso y gradiente superior rosa.
+  - Botón principal rosa (#F3AEC3) con texto negro.
+  - Dos botones de WhatsApp: Ecuador (+593998541082) y USA (+12019954770).
+  - Sin opción "¿Olvidaste tu contraseña?".
+  - Footer con iconos: 100% Seguro, Envíos confiables, Soporte personalizado (solo desktop).
+  - Layout responsive: 2 columnas en desktop (62% video + 38% form), 1 columna en móvil.
+  - Fuente Poppins agregada para títulos.
+  - Funcionalidad de login intacta (no se modificó backend ni redirecciones).
 - **[11-oct-2026]** **Formulario de creación de clientes mejorado**:
   - Email vacío por defecto con placeholder "cliente@email.com" y texto explicativo.
   - Contraseña ahora es **opcional** — si se deja vacía, el cliente no puede loguearse hasta que se le asigne una. Campo destacado en recuadro gris con icono de llave.

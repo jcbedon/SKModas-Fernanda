@@ -1,19 +1,47 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/App";
 import { loginUser, seedSuperadmin } from "@/lib/api";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Lock, ShoppingBag } from "lucide-react";
+import { User, Lock, Eye, EyeOff, ShoppingBag, Shield, Truck, Headphones, Play, Pause, Volume2, VolumeX, Maximize } from "lucide-react";
+
+// WhatsApp numbers
+const WHATSAPP_USA = "+12019954770";
+const WHATSAPP_ECUADOR = "+593998541082";
+
+// Logo URL
+const DIDIER_LOGO = "https://customer-assets.emergentagent.com/job_compraenvivo/artifacts/qvyfsb43_WhatsApp%20Image%202026-02-03%20at%208.05.08%20PM.jpeg";
+
+// Video URL
+const PROMO_VIDEO = "https://customer-assets-v7afamib.emergentagent.net/job_783f5be0-cb6a-4591-926c-0e17259f2605/artifacts/dbb507bb65a16b55_Woman_holding_shopping_bags_smiling_20261010221028.mp4";
+
+// Background image
+const SATIN_BG = "https://static.prod-images.emergentagent.com/jobs/783f5be0-cb6a-4591-926c-0e17259f2605/images/d1b9325ba2d0d9ba5af2c0f01c16ad9c28bbb443bcacfafdc11aad7f7b2b0971.jpeg";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({ identifier: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  
+  // Video controls
+  const videoRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(true);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    // Check for reduced motion preference
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+    
+    const handleChange = (e) => setPrefersReducedMotion(e.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -42,92 +70,576 @@ export default function LoginPage() {
     }
   };
 
+  const togglePlay = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !isMuted;
+      setIsMuted(!isMuted);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration);
+    }
+  };
+
+  const handleSeek = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    if (videoRef.current) {
+      videoRef.current.currentTime = percent * duration;
+    }
+  };
+
+  const handleFullscreen = () => {
+    if (videoRef.current) {
+      if (videoRef.current.requestFullscreen) {
+        videoRef.current.requestFullscreen();
+      } else if (videoRef.current.webkitRequestFullscreen) {
+        videoRef.current.webkitRequestFullscreen();
+      }
+    }
+  };
+
+  const formatTime = (time) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const openWhatsApp = (number) => {
+    const cleanNumber = number.replace(/[^0-9+]/g, '');
+    window.open(`https://wa.me/${cleanNumber.replace('+', '')}`, '_blank');
+  };
+
   return (
-    <div className="app-bg flex items-center justify-center p-4">
-      <Card className="w-full max-w-md shadow-2xl border-0 rounded-2xl overflow-hidden card-glass">
-        <CardHeader className="text-center pb-8 pt-8" style={{ background: '#1E3A5F' }}>
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(46,204,113,0.2)' }}>
-            <ShoppingBag className="w-8 h-8 text-white" />
-          </div>
-          <CardTitle className="text-2xl font-extrabold text-white">Iniciar Sesión</CardTitle>
-          <CardDescription className="text-blue-200">
-            Plataforma de Gestión - Personal Shoppers
-          </CardDescription>
-        </CardHeader>
+    <div 
+      className="min-h-screen w-full overflow-x-hidden"
+      style={{
+        background: '#08090B',
+      }}
+    >
+      {/* Background with satin texture */}
+      <div 
+        className="fixed inset-0 z-0"
+        style={{
+          backgroundImage: `url(${SATIN_BG})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          opacity: 0.6,
+        }}
+      />
+      
+      {/* Pink diagonal light lines overlay */}
+      <div 
+        className="fixed inset-0 z-0 pointer-events-none"
+        style={{
+          background: `
+            linear-gradient(135deg, transparent 40%, rgba(243, 174, 195, 0.03) 45%, transparent 50%),
+            linear-gradient(135deg, transparent 55%, rgba(243, 174, 195, 0.05) 60%, transparent 65%),
+            linear-gradient(135deg, transparent 70%, rgba(243, 174, 195, 0.03) 75%, transparent 80%)
+          `,
+        }}
+      />
 
-        <CardContent className="p-6 space-y-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="identifier" className="font-medium" style={{ color: '#2B2B2B' }}>
-                Email, WhatsApp o ID de Cliente
-              </Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5" style={{ color: '#6B7280' }} />
-                <Input
-                  id="identifier"
-                  data-testid="login-identifier-input"
-                  type="text"
-                  placeholder="Ej: admin@email.com, J4582..."
-                  className="pl-10 h-12 rounded-xl border-gray-200"
-                  style={{ background: '#F2F4F7' }}
-                  value={formData.identifier}
-                  onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
-                  required
+      {/* Main content */}
+      <div className="relative z-10 min-h-screen flex flex-col">
+        
+        {/* Header - Desktop */}
+        <header className="hidden md:flex items-center justify-between px-6 lg:px-12 py-4 max-w-[1240px] mx-auto w-full">
+          <img 
+            src={DIDIER_LOGO} 
+            alt="Didier Shop" 
+            className="h-[110px] lg:h-[130px] w-auto object-contain"
+          />
+          <button
+            onClick={() => openWhatsApp(WHATSAPP_USA)}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-full border transition-all hover:bg-white/5"
+            style={{ 
+              borderColor: '#F6C3D1',
+              color: 'white',
+            }}
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="#F3AEC3">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+            </svg>
+            <span className="font-medium text-sm">Habla por WhatsApp</span>
+          </button>
+        </header>
+
+        {/* Main content area */}
+        <main className="flex-1 flex items-center justify-center px-4 md:px-6 lg:px-12 py-6 md:py-8">
+          <div className="w-full max-w-[1240px] mx-auto">
+            
+            {/* Mobile layout */}
+            <div className="md:hidden flex flex-col items-center gap-4">
+              {/* Logo mobile */}
+              <img 
+                src={DIDIER_LOGO} 
+                alt="Didier Shop" 
+                className="h-[80px] w-auto object-contain mb-2"
+              />
+              
+              {/* Title mobile */}
+              <div className="text-center mb-2">
+                <h1 className="font-bold leading-tight" style={{ fontFamily: 'Poppins, sans-serif' }}>
+                  <span className="text-white text-[28px]">Tus tiendas favoritas,</span>
+                  <br />
+                  <span style={{ color: '#F3AEC3' }} className="text-[28px]">más cerca de ti</span>
+                </h1>
+                <p className="text-[13px] mt-2" style={{ color: '#C8C8CE' }}>
+                  Compras en Estados Unidos, fáciles y seguras
+                </p>
+              </div>
+              
+              {/* Video mobile */}
+              <div 
+                className="w-full rounded-2xl overflow-hidden relative"
+                style={{
+                  border: '1px solid #F6C3D1',
+                  boxShadow: '0 0 20px rgba(243, 174, 195, 0.15)',
+                }}
+              >
+                <video
+                  ref={videoRef}
+                  src={PROMO_VIDEO}
+                  className="w-full h-auto"
+                  style={{ objectFit: 'contain' }}
+                  autoPlay={!prefersReducedMotion}
+                  muted
+                  loop
+                  playsInline
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={handleLoadedMetadata}
                 />
+                {/* Video controls */}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
+                  <div className="flex items-center gap-2">
+                    <button onClick={togglePlay} className="text-white hover:text-pink-300 transition-colors">
+                      {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                    </button>
+                    <div 
+                      className="flex-1 h-1 bg-white/30 rounded-full cursor-pointer relative"
+                      onClick={handleSeek}
+                    >
+                      <div 
+                        className="absolute top-0 left-0 h-full rounded-full"
+                        style={{ 
+                          width: `${(currentTime / duration) * 100 || 0}%`,
+                          background: '#F3AEC3',
+                        }}
+                      />
+                      <div 
+                        className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white"
+                        style={{ left: `${(currentTime / duration) * 100 || 0}%`, transform: 'translate(-50%, -50%)' }}
+                      />
+                    </div>
+                    <span className="text-white text-xs min-w-[70px] text-right">
+                      {formatTime(currentTime)} / {formatTime(duration)}
+                    </span>
+                    <button onClick={toggleMute} className="text-white hover:text-pink-300 transition-colors">
+                      {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                    </button>
+                    <button onClick={handleFullscreen} className="text-white hover:text-pink-300 transition-colors">
+                      <Maximize className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Login card mobile */}
+              <div 
+                className="w-full mt-4 rounded-[20px] p-5"
+                style={{
+                  background: 'linear-gradient(180deg, rgba(243, 174, 195, 0.08) 0%, rgba(8, 9, 11, 0.95) 30%)',
+                  border: '1px solid #F6C3D1',
+                  boxShadow: '0 0 30px rgba(243, 174, 195, 0.1)',
+                  backdropFilter: 'blur(10px)',
+                }}
+              >
+                {/* Shopping bag icon */}
+                <div className="flex justify-center mb-4">
+                  <div 
+                    className="w-12 h-12 rounded-xl flex items-center justify-center"
+                    style={{ 
+                      background: 'rgba(243, 174, 195, 0.15)',
+                      border: '1px solid rgba(243, 174, 195, 0.3)',
+                    }}
+                  >
+                    <ShoppingBag className="w-6 h-6" style={{ color: '#F3AEC3' }} />
+                  </div>
+                </div>
+                
+                <h2 className="text-xl font-bold text-white text-center mb-1">Iniciar Sesión</h2>
+                <p className="text-sm text-center mb-5" style={{ color: '#C8C8CE' }}>
+                  Plataforma de Gestión – Personal Shoppers
+                </p>
+                
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-white mb-1.5 block">Usuario</label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: '#9CA3AF' }} />
+                      <input
+                        type="text"
+                        data-testid="login-identifier-input"
+                        placeholder="Usuario"
+                        className="w-full h-12 pl-10 pr-4 rounded-xl text-white placeholder-gray-500 outline-none transition-all focus:ring-2"
+                        style={{ 
+                          background: 'rgba(30, 30, 35, 0.9)',
+                          border: '1px solid rgba(200, 200, 206, 0.2)',
+                        }}
+                        value={formData.identifier}
+                        onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm font-medium text-white mb-1.5 block">Contraseña</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: '#9CA3AF' }} />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        data-testid="login-password-input"
+                        placeholder="Contraseña"
+                        className="w-full h-12 pl-10 pr-12 rounded-xl text-white placeholder-gray-500 outline-none transition-all focus:ring-2"
+                        style={{ 
+                          background: 'rgba(30, 30, 35, 0.9)',
+                          border: '1px solid rgba(200, 200, 206, 0.2)',
+                        }}
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                      >
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <button
+                    type="submit"
+                    data-testid="login-submit-btn"
+                    disabled={loading}
+                    className="w-full h-12 rounded-xl font-bold text-black transition-all hover:opacity-90 active:scale-[0.98]"
+                    style={{ background: '#F3AEC3' }}
+                  >
+                    {loading ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></span>
+                        Ingresando...
+                      </span>
+                    ) : "Iniciar sesión"}
+                  </button>
+                </form>
+                
+                {/* WhatsApp buttons */}
+                <div className="mt-4 space-y-2">
+                  <button
+                    onClick={() => openWhatsApp(WHATSAPP_ECUADOR)}
+                    className="w-full h-12 rounded-xl font-medium flex items-center justify-center gap-2 transition-all hover:bg-white/5"
+                    style={{ 
+                      border: '1px solid #F6C3D1',
+                      color: 'white',
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="#F3AEC3">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                    </svg>
+                    <span>WhatsApp Ecuador</span>
+                  </button>
+                  <button
+                    onClick={() => openWhatsApp(WHATSAPP_USA)}
+                    className="w-full h-12 rounded-xl font-medium flex items-center justify-center gap-2 transition-all hover:bg-white/5"
+                    style={{ 
+                      border: '1px solid #F6C3D1',
+                      color: 'white',
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="#F3AEC3">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                    </svg>
+                    <span>WhatsApp USA</span>
+                  </button>
+                </div>
+                
+                {/* Seed superadmin - hidden but functional */}
+                <button
+                  onClick={handleSeedSuperadmin}
+                  data-testid="seed-superadmin-btn"
+                  className="mt-4 w-full text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                >
+                  Crear Superadmin (demo)
+                </button>
               </div>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password" className="font-medium" style={{ color: '#2B2B2B' }}>Contraseña</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5" style={{ color: '#6B7280' }} />
-                <Input
-                  id="password"
-                  data-testid="login-password-input"
-                  type="password"
-                  placeholder="Tu contraseña"
-                  className="pl-10 h-12 rounded-xl border-gray-200"
-                  style={{ background: '#F2F4F7' }}
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  required
-                />
+            
+            {/* Desktop layout */}
+            <div className="hidden md:flex gap-8 lg:gap-10 items-start">
+              {/* Left column - Title and Video */}
+              <div className="flex-1" style={{ maxWidth: '62%' }}>
+                {/* Title */}
+                <div className="mb-6">
+                  <h1 
+                    className="font-bold leading-[1.1]" 
+                    style={{ 
+                      fontFamily: 'Poppins, sans-serif',
+                      fontSize: 'clamp(40px, 4vw, 54px)',
+                    }}
+                  >
+                    <span className="text-white">Tus tiendas favoritas,</span>
+                    <br />
+                    <span style={{ color: '#F3AEC3' }}>más cerca de ti</span>
+                  </h1>
+                  <p className="text-base mt-3" style={{ color: '#C8C8CE' }}>
+                    Compras en Estados Unidos, fáciles y seguras
+                  </p>
+                </div>
+                
+                {/* Video */}
+                <div 
+                  className="rounded-2xl overflow-hidden relative"
+                  style={{
+                    border: '1px solid #F6C3D1',
+                    boxShadow: '0 0 30px rgba(243, 174, 195, 0.15)',
+                  }}
+                >
+                  <video
+                    ref={videoRef}
+                    src={PROMO_VIDEO}
+                    className="w-full h-auto"
+                    style={{ objectFit: 'contain' }}
+                    autoPlay={!prefersReducedMotion}
+                    muted
+                    loop
+                    playsInline
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoadedMetadata}
+                  />
+                  
+                  {/* Video controls */}
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                    <div className="flex items-center gap-3">
+                      <button onClick={togglePlay} className="text-white hover:text-pink-300 transition-colors">
+                        {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
+                      </button>
+                      <div 
+                        className="flex-1 h-1.5 bg-white/30 rounded-full cursor-pointer relative group"
+                        onClick={handleSeek}
+                      >
+                        <div 
+                          className="absolute top-0 left-0 h-full rounded-full transition-all"
+                          style={{ 
+                            width: `${(currentTime / duration) * 100 || 0}%`,
+                            background: '#F3AEC3',
+                          }}
+                        />
+                        <div 
+                          className="absolute top-1/2 w-3.5 h-3.5 rounded-full bg-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{ 
+                            left: `${(currentTime / duration) * 100 || 0}%`, 
+                            transform: 'translate(-50%, -50%)' 
+                          }}
+                        />
+                      </div>
+                      <span className="text-white text-sm min-w-[80px] text-right font-mono">
+                        {formatTime(currentTime)} / {formatTime(duration)}
+                      </span>
+                      <button onClick={toggleMute} className="text-white hover:text-pink-300 transition-colors">
+                        {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+                      </button>
+                      <button onClick={handleFullscreen} className="text-white hover:text-pink-300 transition-colors">
+                        <Maximize className="w-6 h-6" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Right column - Login card */}
+              <div 
+                className="rounded-[20px] p-7 lg:p-8"
+                style={{
+                  width: '380px',
+                  minWidth: '380px',
+                  maxWidth: '420px',
+                  background: 'linear-gradient(180deg, rgba(243, 174, 195, 0.08) 0%, rgba(8, 9, 11, 0.95) 30%)',
+                  border: '1px solid #F6C3D1',
+                  boxShadow: '0 0 40px rgba(243, 174, 195, 0.12)',
+                  backdropFilter: 'blur(12px)',
+                }}
+              >
+                {/* Shopping bag icon */}
+                <div className="flex justify-center mb-5">
+                  <div 
+                    className="w-14 h-14 rounded-xl flex items-center justify-center"
+                    style={{ 
+                      background: 'rgba(243, 174, 195, 0.15)',
+                      border: '1px solid rgba(243, 174, 195, 0.3)',
+                    }}
+                  >
+                    <ShoppingBag className="w-7 h-7" style={{ color: '#F3AEC3' }} />
+                  </div>
+                </div>
+                
+                <h2 className="text-2xl font-bold text-white text-center mb-1">Iniciar Sesión</h2>
+                <p className="text-sm text-center mb-6" style={{ color: '#C8C8CE' }}>
+                  Plataforma de Gestión – Personal Shoppers
+                </p>
+                
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-white mb-2 block">Usuario</label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: '#9CA3AF' }} />
+                      <input
+                        type="text"
+                        data-testid="login-identifier-input"
+                        placeholder="Usuario"
+                        className="w-full h-[50px] pl-11 pr-4 rounded-xl text-white placeholder-gray-500 outline-none transition-all focus:ring-2 focus:ring-pink-300/50"
+                        style={{ 
+                          background: 'rgba(30, 30, 35, 0.9)',
+                          border: '1px solid rgba(200, 200, 206, 0.2)',
+                        }}
+                        value={formData.identifier}
+                        onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm font-medium text-white mb-2 block">Contraseña</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: '#9CA3AF' }} />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        data-testid="login-password-input"
+                        placeholder="Contraseña"
+                        className="w-full h-[50px] pl-11 pr-12 rounded-xl text-white placeholder-gray-500 outline-none transition-all focus:ring-2 focus:ring-pink-300/50"
+                        style={{ 
+                          background: 'rgba(30, 30, 35, 0.9)',
+                          border: '1px solid rgba(200, 200, 206, 0.2)',
+                        }}
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                      >
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <button
+                    type="submit"
+                    data-testid="login-submit-btn"
+                    disabled={loading}
+                    className="w-full h-[50px] rounded-xl font-bold text-black transition-all hover:opacity-90 active:scale-[0.98]"
+                    style={{ background: '#F3AEC3' }}
+                  >
+                    {loading ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></span>
+                        Ingresando...
+                      </span>
+                    ) : "Iniciar sesión"}
+                  </button>
+                </form>
+                
+                {/* WhatsApp buttons */}
+                <div className="mt-5 space-y-3">
+                  <button
+                    onClick={() => openWhatsApp(WHATSAPP_ECUADOR)}
+                    className="w-full h-[50px] rounded-xl font-medium flex items-center justify-center gap-2 transition-all hover:bg-white/5"
+                    style={{ 
+                      border: '1px solid #F6C3D1',
+                      color: 'white',
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="#F3AEC3">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                    </svg>
+                    <span>WhatsApp Ecuador</span>
+                  </button>
+                  <button
+                    onClick={() => openWhatsApp(WHATSAPP_USA)}
+                    className="w-full h-[50px] rounded-xl font-medium flex items-center justify-center gap-2 transition-all hover:bg-white/5"
+                    style={{ 
+                      border: '1px solid #F6C3D1',
+                      color: 'white',
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="#F3AEC3">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                    </svg>
+                    <span>WhatsApp USA</span>
+                  </button>
+                </div>
+                
+                {/* Seed superadmin - hidden but functional */}
+                <button
+                  onClick={handleSeedSuperadmin}
+                  data-testid="seed-superadmin-btn"
+                  className="mt-5 w-full text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                >
+                  Crear Superadmin (demo)
+                </button>
               </div>
             </div>
-
-            <Button
-              type="submit"
-              data-testid="login-submit-btn"
-              className="w-full h-12 font-bold rounded-xl shadow-lg transition-all active:scale-95"
-              style={{ background: '#1E3A5F', color: 'white' }}
-              disabled={loading}
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
-                  Ingresando...
-                </span>
-              ) : "Ingresar"}
-            </Button>
-          </form>
-
-          <div className="text-center space-y-3">
-            <p className="text-sm" style={{ color: '#6B7280' }}>
-              ¿No tienes cuenta?{" "}
-              <Link to="/register" className="font-semibold hover:underline" style={{ color: '#1E3A5F' }}>
-                Regístrate aquí
-              </Link>
-            </p>
-            <button
-              onClick={handleSeedSuperadmin}
-              data-testid="seed-superadmin-btn"
-              className="text-xs underline" style={{ color: '#9CA3AF' }}
-            >
-              Crear Superadmin (demo)
-            </button>
           </div>
-        </CardContent>
-      </Card>
+        </main>
+        
+        {/* Footer benefits - Desktop only */}
+        <footer className="hidden md:block pb-8 pt-4">
+          <div className="max-w-[1240px] mx-auto px-6 lg:px-12">
+            <div className="flex items-center justify-center gap-8 lg:gap-16">
+              <div className="flex items-center gap-3">
+                <Shield className="w-6 h-6" style={{ color: '#F3AEC3' }} />
+                <span className="text-sm" style={{ color: '#C8C8CE' }}>100% Seguro</span>
+              </div>
+              <div className="w-px h-5 bg-gray-700"></div>
+              <div className="flex items-center gap-3">
+                <Truck className="w-6 h-6" style={{ color: '#F3AEC3' }} />
+                <span className="text-sm" style={{ color: '#C8C8CE' }}>Envíos confiables</span>
+              </div>
+              <div className="w-px h-5 bg-gray-700"></div>
+              <div className="flex items-center gap-3">
+                <Headphones className="w-6 h-6" style={{ color: '#F3AEC3' }} />
+                <span className="text-sm" style={{ color: '#C8C8CE' }}>Soporte personalizado</span>
+              </div>
+            </div>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }
