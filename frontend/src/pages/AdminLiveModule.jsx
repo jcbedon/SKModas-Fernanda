@@ -10,6 +10,7 @@ import {
   getClientInfo,
   getProductHistory,
   createLiveModulePurchases,
+  getLivePurchases,
 } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Video, Plus, Search, X, DollarSign, Store, Radio, CheckCircle,
-  AlertTriangle, Trash2, ArrowLeft, Loader2, Users, Tag,
+  AlertTriangle, Trash2, ArrowLeft, Loader2, Users, Tag, Package, UserPlus,
 } from "lucide-react";
 
 const getEffectiveTaxRate = (taxOption, customTax) => {
@@ -58,6 +59,15 @@ export default function AdminLiveModule() {
   const priceRef = useRef(null);
   const clientSearchRef = useRef(null);
 
+  // Registered products grid
+  const [livePurchases, setLivePurchases] = useState([]);
+  const [groupedProducts, setGroupedProducts] = useState([]);
+  const [addToProductModal, setAddToProductModal] = useState(null); // { item_name, price, commission }
+  const [addClientQuery, setAddClientQuery] = useState("");
+  const [addingClients, setAddingClients] = useState([]);
+  const [submittingAdd, setSubmittingAdd] = useState(false);
+  const addClientRef = useRef(null);
+
   useEffect(() => {
     if (!moduleEnabled) return;
     loadLives();
@@ -80,6 +90,47 @@ export default function AdminLiveModule() {
       }
     } catch (_e) { /* noop */ }
   };
+
+  const loadLivePurchases = async (liveId) => {
+    if (!liveId) return;
+    try {
+      const res = await getLivePurchases(liveId);
+      const purchases = res.data || [];
+      setLivePurchases(purchases);
+      
+      // Group by item_name + price + commission to show unique products
+      const grouped = {};
+      purchases.forEach(p => {
+        const key = `${p.item_name}|${p.price}|${p.commission_amount || 0}`;
+        if (!grouped[key]) {
+          grouped[key] = {
+            item_name: p.item_name,
+            price: p.price,
+            commission: p.commission_amount || 0,
+            customers: [],
+          };
+        }
+        grouped[key].customers.push({
+          customer_id: p.customer_id,
+          customer_name: p.customer_name || p.customer_id,
+        });
+      });
+      setGroupedProducts(Object.values(grouped));
+    } catch (_e) {
+      setLivePurchases([]);
+      setGroupedProducts([]);
+    }
+  };
+
+  // Load purchases when live changes
+  useEffect(() => {
+    if (selectedLive?.id) {
+      loadLivePurchases(selectedLive.id);
+    } else {
+      setLivePurchases([]);
+      setGroupedProducts([]);
+    }
+  }, [selectedLive?.id]);
 
   const refreshHistory = async (q = "") => {
     try {
@@ -201,12 +252,103 @@ export default function AdminLiveModule() {
       setSelectedClients([]);
       refreshHistory();
       loadLives();
+      loadLivePurchases(selectedLive.id); // Refresh the products grid
       // focus product name for the next entry
       setTimeout(() => document.getElementById("live-product-name")?.focus(), 50);
     } catch (e) {
       toast.error(e.response?.data?.detail || "Error al registrar");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // === Add clients to existing product ===
+  const filteredAddClients = useMemo(() => {
+    const q = addClientQuery.trim().toLowerCase();
+    if (!q) return [];
+    // Exclude clients already in this product
+    const existingIds = addToProductModal?.existingCustomerIds || [];
+    const alreadyAdding = addingClients.map(c => c.customer_id);
+    return (allClients || [])
+      .filter(c =>
+        !existingIds.includes(c.customer_id) &&
+        !alreadyAdding.includes(c.customer_id) &&
+        ((c.customer_id || "").toLowerCase().includes(q) || (c.name || "").toLowerCase().includes(q))
+      )
+      .slice(0, 8);
+  }, [addClientQuery, allClients, addToProductModal, addingClients]);
+
+  const openAddToProduct = (product) => {
+    // Find all customer IDs already in this product
+    const existingIds = groupedProducts
+      .find(p => p.item_name === product.item_name && p.price === product.price && p.commission === product.commission)
+      ?.customers.map(c => c.customer_id) || [];
+    setAddToProductModal({ ...product, existingCustomerIds: existingIds });
+    setAddClientQuery("");
+    setAddingClients([]);
+    setTimeout(() => addClientRef.current?.focus(), 100);
+  };
+
+  const addClientToModal = async (client) => {
+    if (!client) return;
+    if (addingClients.some(c => c.customer_id === client.customer_id)) {
+      setAddClientQuery("");
+      addClientRef.current?.focus();
+      return;
+    }
+    const base = {
+      customer_id: client.customer_id,
+      name: client.name,
+      wallet_balance: client.wallet_balance ?? 0,
+      loading: true,
+    };
+    setAddingClients(prev => [base, ...prev]);
+    setAddClientQuery("");
+    addClientRef.current?.focus();
+    try {
+      const res = await getClientInfo(client.customer_id);
+      const d = res.data;
+      setAddingClients(prev => prev.map(c => c.customer_id === client.customer_id
+        ? { ...c, wallet_balance: Number(d.wallet_balance || 0), loading: false }
+        : c));
+    } catch (_e) {
+      setAddingClients(prev => prev.map(c => c.customer_id === client.customer_id ? { ...c, loading: false } : c));
+    }
+  };
+
+  const handleAddClientKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const q = addClientQuery.trim().toLowerCase();
+      const exact = (allClients || []).find(c => (c.customer_id || "").toLowerCase() === q);
+      addClientToModal(exact || filteredAddClients[0]);
+    }
+  };
+
+  const removeAddingClient = (cid) => setAddingClients(prev => prev.filter(c => c.customer_id !== cid));
+
+  const handleAddToExistingProduct = async () => {
+    if (!addToProductModal || addingClients.length === 0) return;
+    setSubmittingAdd(true);
+    try {
+      const res = await createLiveModulePurchases({
+        live_id: selectedLive.id,
+        item_name: addToProductModal.item_name,
+        store: selectedLive.store || "",
+        price: addToProductModal.price,
+        commission_amount: addToProductModal.commission || null,
+        customer_ids: addingClients.map(c => c.customer_id),
+      });
+      const created = res.data?.created?.length || 0;
+      toast.success(`${created} cliente(s) agregado(s) a "${addToProductModal.item_name}"`);
+      setAddToProductModal(null);
+      setAddingClients([]);
+      loadLives();
+      loadLivePurchases(selectedLive.id);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Error al agregar clientes");
+    } finally {
+      setSubmittingAdd(false);
     }
   };
 
@@ -484,9 +626,180 @@ export default function AdminLiveModule() {
                 </Button>
               </CardContent>
             </Card>
+
+            {/* === Products Grid - Already registered === */}
+            {groupedProducts.length > 0 && (
+              <Card className="rounded-2xl">
+                <CardContent className="p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                      <Package className="h-4 w-4 text-rose-600" /> Productos Registrados
+                    </h3>
+                    <Badge variant="outline" className="font-bold">{groupedProducts.length} productos</Badge>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="live-products-grid">
+                    {groupedProducts.map((prod, idx) => (
+                      <div
+                        key={idx}
+                        className="border border-slate-200 rounded-xl p-3 hover:border-rose-200 hover:bg-rose-50/30 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <h4 className="font-semibold text-slate-800 text-sm leading-tight truncate flex-1" title={prod.item_name}>
+                            {prod.item_name}
+                          </h4>
+                          <Badge className="bg-slate-100 text-slate-600 text-[10px] shrink-0">
+                            {prod.customers.length} cliente{prod.customers.length !== 1 ? 's' : ''}
+                          </Badge>
+                        </div>
+                        
+                        <div className="flex items-center gap-3 text-xs text-slate-500 mb-3">
+                          <span className="flex items-center gap-1">
+                            <DollarSign className="h-3 w-3" />
+                            {prod.price.toFixed(2)}
+                          </span>
+                          {prod.commission > 0 && (
+                            <span className="text-green-600">
+                              +${prod.commission.toFixed(2)} com.
+                            </span>
+                          )}
+                          <span className="font-semibold text-slate-700">
+                            = ${(prod.price + prod.commission).toFixed(2)}
+                          </span>
+                        </div>
+                        
+                        {/* Customer chips */}
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {prod.customers.slice(0, 5).map((c, cIdx) => (
+                            <span
+                              key={cIdx}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 rounded-full text-[10px] text-slate-600"
+                              title={c.customer_name}
+                            >
+                              <span className="font-bold text-rose-600">{c.customer_id}</span>
+                            </span>
+                          ))}
+                          {prod.customers.length > 5 && (
+                            <span className="inline-flex items-center px-2 py-0.5 bg-slate-200 rounded-full text-[10px] text-slate-500">
+                              +{prod.customers.length - 5} más
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Add client button */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openAddToProduct(prod)}
+                          className="w-full rounded-lg text-xs h-8 border-rose-200 text-rose-600 hover:bg-rose-50"
+                          data-testid={`add-to-product-${idx}`}
+                        >
+                          <UserPlus className="h-3.5 w-3.5 mr-1" />
+                          Agregar cliente
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </>
         )}
       </div>
+
+      {/* === Modal: Add clients to existing product === */}
+      {addToProductModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setAddToProductModal(null)}>
+          <div
+            className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-slate-100">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-800">Agregar clientes</h3>
+                <button onClick={() => setAddToProductModal(null)} className="text-slate-400 hover:text-slate-600">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <p className="text-sm text-slate-500 mt-1">
+                Producto: <span className="font-semibold text-rose-600">{addToProductModal.item_name}</span>
+              </p>
+              <p className="text-xs text-slate-400">
+                ${addToProductModal.price.toFixed(2)} + ${addToProductModal.commission.toFixed(2)} = ${(addToProductModal.price + addToProductModal.commission).toFixed(2)}
+              </p>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Search clients */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  ref={addClientRef}
+                  value={addClientQuery}
+                  onChange={e => setAddClientQuery(e.target.value)}
+                  onKeyDown={handleAddClientKeyDown}
+                  placeholder="Buscar cliente por código o nombre..."
+                  className="h-11 rounded-lg pl-9"
+                  data-testid="add-product-client-search"
+                />
+                {filteredAddClients.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                    {filteredAddClients.map(c => (
+                      <button
+                        key={c.customer_id}
+                        onClick={() => addClientToModal(c)}
+                        className="w-full flex items-center justify-between px-3 py-2 hover:bg-rose-50 text-left text-sm"
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] font-bold text-rose-600 shrink-0">{c.customer_id}</span>
+                          <span className="truncate text-slate-700">{c.name}</span>
+                        </span>
+                        <span className="text-xs text-slate-500 shrink-0">${Number(c.wallet_balance || 0).toFixed(2)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Selected clients for adding */}
+              <div className="space-y-2">
+                {addingClients.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-4">Busca y selecciona los clientes a agregar</p>
+                )}
+                {addingClients.map(c => (
+                  <div
+                    key={c.customer_id}
+                    className="flex items-center justify-between p-3 rounded-xl border border-slate-200"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-[11px] font-bold text-rose-600 shrink-0">{c.customer_id}</span>
+                      <span className="font-medium text-slate-800 truncate">{c.name}</span>
+                      {c.loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />}
+                    </div>
+                    <button onClick={() => removeAddingClient(c.customer_id)} className="text-slate-400 hover:text-rose-600">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Submit button */}
+              <Button
+                onClick={handleAddToExistingProduct}
+                disabled={submittingAdd || addingClients.length === 0}
+                className="w-full h-12 rounded-xl bg-[#B84A5E] hover:bg-[#A33F52] text-white font-bold"
+                data-testid="add-product-submit"
+              >
+                {submittingAdd ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>Agregar {addingClients.length} cliente(s) · ${((addToProductModal.price + addToProductModal.commission) * addingClients.length).toFixed(2)}</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
