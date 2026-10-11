@@ -301,7 +301,7 @@ class User(BaseModel):
     whatsapp: str
     email: Optional[str] = None
     whatsapp_consent: bool = False
-    password_hash: str
+    password_hash: Optional[str] = None  # Can be None if client has no password yet
     # Shadow copy of the password in plain text so admin can view the current
     # client password from the Edit Client screen. Only set for passwords
     # captured after this feature was introduced (older clients will be None).
@@ -619,8 +619,8 @@ class AdminClientCreate(BaseModel):
     country: str
     whatsapp: str
     email: Optional[str] = None
-    password: str
-    commission_fee: float = DEFAULT_COMMISSION_FEE
+    password: Optional[str] = None  # Optional - client won't be able to login if empty
+    commission_fee: float = 0.0  # Default commission is 0
     initial_balance: float = 0.0
     custom_customer_id: Optional[str] = None  # Optional custom customer ID
 
@@ -2776,7 +2776,8 @@ async def admin_create_client(data: AdminClientCreate, current_user: dict = Depe
     user = User(tenant_id=tid, customer_id=customer_id, referral_code=customer_id,
         commission_fee=data.commission_fee, name=data.name, country=data.country,
         whatsapp=data.whatsapp, email=data.email, whatsapp_consent=True,
-        password_hash=hash_password(data.password), password_plain=data.password,
+        password_hash=hash_password(data.password) if data.password else None,
+        password_plain=data.password if data.password else None,
         role="client", is_active=True)
     await db.users.insert_one(user.model_dump())
     wallet = Wallet(tenant_id=tid, user_id=user.id, customer_id=customer_id, available=data.initial_balance)

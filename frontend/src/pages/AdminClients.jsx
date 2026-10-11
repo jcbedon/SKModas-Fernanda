@@ -34,7 +34,7 @@ export default function AdminClients() {
   const [submitting, setSubmitting] = useState(false);
   const [newClient, setNewClient] = useState({
     name: "", country: "", whatsapp: "", email: "", password: "",
-    commission_fee: 3, initial_balance: 0, custom_customer_id: ""
+    commission_fee: 0, initial_balance: 0, custom_customer_id: ""
   });
   const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -323,8 +323,8 @@ export default function AdminClients() {
   };
 
   const handleCreateClient = async () => {
-    if (!newClient.name || !newClient.password) {
-      toast.error("Completa nombre y contraseña");
+    if (!newClient.name) {
+      toast.error("El nombre es obligatorio");
       return;
     }
     if (!newClient.whatsapp || !newClient.whatsapp.startsWith('+')) {
@@ -341,7 +341,7 @@ export default function AdminClients() {
         name: newClient.name
       });
       setCreateDialogOpen(false);
-      setNewClient({ name: "", country: "", whatsapp: "", email: "", password: "", commission_fee: 3, initial_balance: 0, custom_customer_id: "" });
+      setNewClient({ name: "", country: "", whatsapp: "", email: "", password: "", commission_fee: 0, initial_balance: 0, custom_customer_id: "" });
       setDuplicateWarning(null);
       setShowPassword(false);
       loadClients();
@@ -506,11 +506,12 @@ https://outletsusaec.shop/`;
                 </div>
                 <div>
                   <Label>Email de Cliente (opcional)</Label>
-                  <Input type="email" placeholder="" className="rounded-xl mt-1"
+                  <Input type="email" placeholder="cliente@email.com" className="rounded-xl mt-1"
                     value={newClient.email} 
                     onChange={(e) => setNew("email", e.target.value)} 
                     onBlur={checkForDuplicates}
                   />
+                  <p className="text-xs text-gray-500 mt-1">Puedes dejarlo vacío si no lo tienes</p>
                 </div>
 
                 {/* Duplicate Warning */}
@@ -532,14 +533,18 @@ https://outletsusaec.shop/`;
                   </div>
                 )}
 
-                <div>
-                  <Label>Contraseña *</Label>
-                  <div className="relative mt-1">
+                {/* Contraseña Section - Highlighted */}
+                <div className="bg-slate-50 border-2 border-slate-200 rounded-xl p-4">
+                  <Label className="flex items-center gap-2 text-slate-700 font-semibold mb-2">
+                    <Key className="h-4 w-4" />
+                    Contraseña (opcional)
+                  </Label>
+                  <div className="relative">
                     <Input 
                       data-testid="new-client-password" 
                       type={showPassword ? "text" : "password"} 
-                      placeholder="" 
-                      className="rounded-xl pr-10"
+                      placeholder="Dejar vacío si no deseas asignar" 
+                      className="rounded-xl pr-10 bg-white"
                       value={newClient.password} 
                       onChange={(e) => setNew("password", e.target.value)} 
                     />
@@ -551,18 +556,32 @@ https://outletsusaec.shop/`;
                       {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
+                  <p className="text-xs text-slate-500 mt-2">Si lo dejas vacío, el cliente no podrá acceder al portal hasta que le asignes una contraseña.</p>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Comisión (USD)</Label>
-                    <Input type="number" step="0.01" min="0" placeholder="3.00" className="rounded-xl mt-1"
-                      value={newClient.commission_fee} onChange={(e) => setNew("commission_fee", parseFloat(e.target.value) || 0)} />
-                  </div>
-                  <div>
-                    <Label>Saldo Inicial (USD)</Label>
-                    <Input type="number" step="0.01" min="0" placeholder="0.00" className="rounded-xl mt-1"
-                      value={newClient.initial_balance} onChange={(e) => setNew("initial_balance", parseFloat(e.target.value) || 0)} />
-                  </div>
+
+                {/* Comisión Section - Highlighted */}
+                <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4">
+                  <Label className="flex items-center gap-2 text-green-700 font-semibold mb-2">
+                    <DollarSign className="h-4 w-4" />
+                    Comisión por Compra (USD)
+                  </Label>
+                  <Input 
+                    type="number" 
+                    step="0.01" 
+                    min="0" 
+                    placeholder="0.00" 
+                    className="rounded-xl bg-white text-lg font-bold"
+                    value={newClient.commission_fee} 
+                    onChange={(e) => setNew("commission_fee", parseFloat(e.target.value) || 0)} 
+                    data-testid="new-client-commission"
+                  />
+                  <p className="text-xs text-green-600 mt-2">Por defecto es $0. Puedes cambiarlo después en cualquier momento.</p>
+                </div>
+
+                <div>
+                  <Label>Saldo Inicial (USD)</Label>
+                  <Input type="number" step="0.01" min="0" placeholder="0.00" className="rounded-xl mt-1"
+                    value={newClient.initial_balance} onChange={(e) => setNew("initial_balance", parseFloat(e.target.value) || 0)} />
                 </div>
                 <Button onClick={handleCreateClient} disabled={submitting} data-testid="submit-create-client-btn"
                   className="w-full h-12 font-bold rounded-xl" style={{ background: '#1E3A5F', color: 'white' }}>

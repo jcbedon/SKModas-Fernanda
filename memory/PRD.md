@@ -12,6 +12,13 @@ Multi-tenant SaaS para personal shoppers con live shopping, wallets, facturació
 - AI OCR: emergentintegrations (Gemini Vision)
 - PDFs: jsPDF · Object Store: Emergent internal
 
+## Changelog (Oct 2026)
+- **[11-oct-2026]** **Formulario de creación de clientes mejorado**:
+  - Email vacío por defecto con placeholder "cliente@email.com" y texto explicativo.
+  - Contraseña ahora es **opcional** — si se deja vacía, el cliente no puede loguearse hasta que se le asigne una. Campo destacado en recuadro gris con icono de llave.
+  - Comisión por defecto cambiada de $3 a **$0** — campo destacado en recuadro verde con icono de dólar y texto explicativo.
+  - Backend: `AdminClientCreate.password` ahora es `Optional[str]`, `commission_fee` default 0. Modelo `User.password_hash` ahora es `Optional[str]`.
+
 ## Changelog (Feb 2026)
 - **[13-feb-2026]** **Fix crítico recalc respeta asignaciones históricas** (commit 6a53481): `recalculate_client_invoices` ahora tiene 3 niveles de prioridad — (1) manual `target_invoice_id`, (2) snapshot de `invoice.applied_deposits[]` previos si la factura sigue no-anulada, (3) corte semanal Mon-Sun. Antes: al ejecutar recalc, todos los depósitos históricos (asignados bajo lógica pre-corte-semanal) quedaban flotantes → ejemplo J2934 tenía $314 flotantes falsos y deuda inflada +$186. Ahora: recalc conserva la data histórica intacta, y solo los depósitos verdaderamente nuevos sin factura misma-semana quedan flotantes. Validado via 11/11 tests en `/app/backend/tests/test_recalc_preserves_historic.py`.
 - **[08-feb-2026]** Fix truncamiento histórico: `.to_list(100)` y `.to_list(500)` reemplazados por `.to_list(20000)` en 25 endpoints (recargas, lives, shipments, invoices, empleados, audit logs, etc.). Restaura el fix previo que el rollback a Aug-21 había revertido. Validado: `/api/wallet/all-deposits` ahora devuelve 309 depósitos con historial completo desde Feb 8 — antes cortaba en 100.

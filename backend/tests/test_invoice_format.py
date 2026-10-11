@@ -13,7 +13,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://outlets-bug-fix.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://personal-shopper-13.preview.emergentagent.com')
 
 class TestInvoiceFormat:
     """Test invoice format and API response structure"""

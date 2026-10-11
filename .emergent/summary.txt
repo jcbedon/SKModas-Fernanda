@@ -1,150 +1,186 @@
-<analysis>**original_problem_statement:**
-The user is building a SaaS platform for personal shoppers. The initial project scope included multi-tenancy, and modules for shipments, wallets, live shopping, reporting, and client management.
+<analysis>**original_problem_statement**: 
+The application is a multi-tenant SaaS for personal shoppers. It handles invoices, wallets/recharges, shipments, bank accounts, an internal ledger, client portals, and live shopping. The user recently requested the creation of a new, highly dynamic Live module for fast product entry (visually distinct but sharing data with Live Shopping), admin password locks for modifying finalized lives, UI refinements, deposit tracking features (numbering and bank reviewed toggles), and granular employee permissions to hide money-related KPIs on the main dashboard while keeping count metrics visible.
 
-**PRODUCT REQUIREMENTS:**
-Recent user requests implemented in the last session:
-1.  **Admin Dashboard:** Create a comprehensive statistics dashboard for admins, showing sales, earnings, and performance data with interactive graphs. (Completed)
-2.  **Branding:** Change the application title to Outlets USA EC and update the browser favicon. (Completed)
-3.  **Live Shopping:** Allow admins to edit all fields of a purchase (price, tax, commission) after it has been created within a Live session. (Completed)
-4.  **Performance:** Fix all N+1 query performance warnings identified by the health check. (Completed)
-5.  **Client Shipment View:**
-    *   Display the shipment's weight. (Completed)
-    *   Allow clients to view the list of products included in their shipment. (Completed)
-    *   Allow clients to view files attached to their shipment. (Regressed into a bug)
-6.  **(ACTIVE BUG)** Fix an issue where viewing a shipment attachment (specifically a video) logs the client out.
+PRODUCT REQUIREMENTS:
+- Global UI: Keep the clean shell (), desktop sidebar, mobile header, and tenant hero banner. No reverting to old image backgrounds.
+- Maintain accurate accounting for pending balances, wallet recharges, and bank accounts.
+- Live module must allow rapid bulk creation of purchases, auto-calculating final prices (price + commission), and must label these purchases with .
 
-**User's preferred language**: Spanish. The next agent MUST respond in Spanish.
+**User's preferred language**: Spanish (INSTRUCT next agent to respond in Spanish only).
 
-**what currently exists?**
-A multi-tenant SaaS platform with a React frontend and FastAPI/MongoDB backend. Admins can manage clients, live shopping, wallets, and shipments. Clients can view their dashboard, balance, and shipment history.
-
-Recent additions include a new statistics page () with interactive charts using , full editing of purchases in the live module, and significant backend performance optimization to eliminate N+1 queries. The client dashboard now shows shipment weight and product details in a modal. However, the feature for clients to view shipment attachments is faulty.
+**what currently exists?**: 
+A monolithic FastAPI backend and React/Tailwind/Shadcn frontend. The system supports Superadmin and Tenant Admin roles. Features include:
+- Client Management & Dashboard
+- Invoices & Shipments (with PDF generation)
+- Wallet/Deposit maintenance with lock-in features ()
+- Bank Accounts ledger
+- Live Shopping & newly added fast Live module
+- Granular employee permissions (e.g., )
 
 **Last working item**:
--   **Last item agent was working:** The agent was addressing a critical bug reported by the user. When a client tries to view an attachment (specifically a video file) from their shipment details page, the application logs them out, forcing them to sign in again. The user has reported this twice and is frustrated.
--   **Status:** IN PROGRESS
--   **Agent Testing Done:** N
--   **Which testing method agent to use?** both
--   **User Testing Done:** Y (User reported the bug)
+- Last item agent was working: Reverting the Mejores Clientes (Top Customers) widget on the Admin Dashboard to be always visible to employees, regardless of whether they have the  permission. The user explicitly requested this after testing.
+- Status: USER VERIFICATION PENDING
+- Agent Testing Done: Y
+- Which testing method agent to use: NA (Code replaced successfully; pending user confirmation to deploy).
+- User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Client Logged Out When Viewing Shipment Attachments (P0)**
-    -   **Description:** When a client clicks the link/button to view an attached file (reported with a video) in their shipment details, their session is terminated, and they are redirected to the login page.
-    -   **Attempted fixes:** None yet for the logout issue. The previous implementation for viewing attachments has introduced this regression.
-    -   **Next debug checklist:**
-        1.  Investigate  to see how the attachment URL is being handled. The link should likely open in a new tab () to prevent interfering with the React Router's state.
-        2.  Check the browser's developer tools (Network tab) when the link is clicked. Look for any API calls that fail with a 401 or 403 status code, which would trigger the  to log the user out.
-        3.  Verify the backend endpoint that serves static files from the  directory. Ensure it doesn't require authentication headers in a way that a direct browser link would fail.
-        4.  Confirm the URL for the attachment is correct and doesn't accidentally point to a protected application route.
-    -   **Why fix this issue and what will be achieved with the fix?** This is a critical, user-facing bug that breaks a required feature and is causing significant user frustration.
-    -   **Status:** IN PROGRESS
-    -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** both
-    -   **Blocked on other issue:** No
+- Issue 1: Deploy pending frontend changes to production (Dashboard money KPI permissions, Live module dashboard card, Superadmin direct toggle, auto Live title, and Mejores Clientes visibility).
+  - Attempted fixes: Changes are made in preview, awaiting deployment.
+  - Next debug checklist: Ask user for confirmation to trigger deployment.
+  - Why fix this issue: To push all recent approved frontend features to production.
+  - Status: USER VERIFICATION PENDING
+  - Is recurring issue? N
+  - Should Test frontend/backend/both after fix? NA
+  - Blocked on other issue: None
+- Issue 2: Audit logging for Admin overrides in closed lives.
+  - Attempted fixes: None yet.
+  - Next debug checklist: Update backend routes for delete/reactivate to write to  indicating who overrode the finalized live lock.
+  - Why fix this issue: Security and traceability for admin actions.
+  - Status: NOT STARTED
+  - Is recurring issue? N
+  - Should Test frontend/backend/both after fix? backend
+  - Blocked on other issue: None
+- Issue 3: Require Admin Password to edit prices/commissions in finalized lives.
+  - Attempted fixes: None yet. Lock is currently only on delete and reactivate.
+  - Next debug checklist: Check  edit purchase modal and  PUT  to enforce admin password check if the live is finalized.
+  - Why fix this issue: Prevents employees from altering financial totals on closed lives.
+  - Status: NOT STARTED
+  - Is recurring issue? N
+  - Should Test frontend/backend/both after fix? both
+  - Blocked on other issue: None
+- Issue 4: Add row-level button to restore cancelled invoices in .
+  - Attempted fixes: None yet.
+  - Next debug checklist: 
+  - Why fix this issue: Requested by user to easily recover mistakenly voided invoices.
+  - Status: NOT STARTED
+  - Is recurring issue? N
+  - Should Test frontend/backend/both after fix? frontend
+  - Blocked on other issue: None
+- Issue 5: Approved deposits should register the system date in the ledger, not the receipt date.
+  - Attempted fixes: None in this session.
+  - Next debug checklist: Check deposit approval logic in  to ensure  uses  for ledger entries instead of the user-provided date.
+  - Why fix this issue: Accounting accuracy (P1 issue).
+  - Status: NOT STARTED
+  - Is recurring issue? N
+  - Should Test frontend/backend/both after fix? backend
+  - Blocked on other issue: None
 
 **In progress Task List**:
-None. The priority is the bug fix.
+- Task 1: Trigger production deployment for recent frontend features.
+  - Where to resume: Await user's confirmation message, then use  if approved.
+  - What will be achieved with this? Production sync.
+  - Status: TESTING PENDING (User verification pending)
+  - Should Test frontend/backend/both after fix? NA
+  - Blocked on something: User approval.
 
-**Upcoming and Future Tasks**
--   **Future Tasks:**
-    -   **Task 1: Integrate WhatsApp Cloud API (P2)**
-        -   **Description:** Integrate the WhatsApp Cloud API for notifications.
-        -   **Next step:** Gather specific requirements from the user and then use the  agent.
-    -   **Task 2: Backend Refactoring (P2)**
-        -   **Description:** The  file is a monolith. It should be refactored into domain-specific routers and schemas for better maintainability.
-        -   **Next step:** Plan and execute the breakdown of  into a structured format (e.g., , ).
+**Upcoming and Future Tasks**:
+Upcoming Tasks:
+- P0: Split  (currently >10k lines) into FastAPI routers.
+- P1: Add reviewed checkmark in the Bank Accounts module ledger (matching the new one in AdminWallet).
+- P2: Show counts of reviewed vs. pending deposits per week in AdminWallet.
+- P2: Add filter for Pending Reconciliation deposits in AdminWallet.
+- P2: WhatsApp provider selection (Twilio vs Meta).
 
-**Completed work in this session**
--   **Admin Statistics Dashboard:** Created a new page at  with summary cards and interactive charts (area, bar, pie) for sales, profits, and store/live performance.
--   **Branding Update:** Changed the site title to Outlets USA EC and updated the browser favicon.
--   **Full Purchase Editing:** Admins can now edit all financial details (tax, commission, price) of a purchase after its creation within the Admin Live module.
--   **Performance Optimization:** Resolved all N+1 query warnings by refactoring 4 backend endpoints to use efficient batch fetching and aggregation pipelines.
--   **Client Shipment UI:** Implemented UI for clients to see the shipment weight and view a detailed list of products within each shipment via a modal.
--   **Babel/Vite Bug Workaround:** Consistently worked around a Maximum call stack size exceeded error by refactoring complex components into smaller, isolated ones.
+**Completed work in this session**:
+- Live auto-close every Monday at 12:00 PM Ecuador time (verified working via logs).
+- Admin password lock for reactivating and deleting purchases in finalized lives (, ).
+- Live module UI layout fixes (Factura Tienda/Ganancia fits in one line, lists scroll properly inside container).
+- AdminWallet deposit history: added weekly numbering and bank reviewed toggle for approved deposits (, ).
+- New Live module for fast product entry with an elegant pink/wine theme (, ).
+- Superadmin direct ON/OFF toggle for the new Live module ().
+- Auto-naming for Live sessions () in both Live and Live Shopping modules.
+- Dashboard money KPIs visibility restricted by  permission, while keeping count cards and Mejores Clientes visible to all employees (, ).
 
-**Earlier issues found/mentioned but not fixed**
--   **Issue 1: Babel Plugin Conflict**
-    -   **Description:** A recurring Maximum call stack size exceeded error originates from a  babel plugin when processing complex JSX components.
-    -   **Debug checklist:** The root cause has not been investigated. The workaround is to break large components into smaller ones. If the issue persists, the plugin itself may need to be investigated or disabled.
-    -   **Why to solve this issue and what will be achieved with this?** Fixing the root cause would remove a significant development obstacle and reduce the need for architectural workarounds.
-    -   **Should Test frontend/backend/both after fix:** frontend
-    -   **Is recurring issue?** Y
+**Earlier issues found/mentioned but not fixed**:
+- Issue 1: WhatsApp provider configuration is pending.
+  - Debug checklist: Await user decision between Twilio and Meta Cloud API.
+  - Why to solve this issue: To enable WhatsApp notifications.
+  - Should Test frontend/backend/both after fix: both
+  - Is recurring issue? Y
+- Issue 2: Backend monolithic structure ().
+  - Debug checklist: Break  into smaller route files.
+  - Why to solve this issue: File is over 10,000 lines, causing maintenance and context window overhead.
+  - Should Test frontend/backend/both after fix: backend
+  - Is recurring issue? Y
 
-**Known issue recurrence from previous fork**
--   **Issue:** The Maximum call stack size exceeded babel plugin error recurred and required workarounds.
--   **Recurrence count:** 2+
--   **Status:** RESOLVED (Workaround)
+**Known issue recurrence from previous fork**:
+- Issue recurrence in previous fork: None.
+- Recurrence count: 0
+- Status: RESOLVED
 
-**Code Architecture**
+**Code Architecture**:
+- Frontend: React + Tailwind + Shadcn UI in 
+- Backend: FastAPI monolithic ()
+- Database: MongoDB (Motor)
 
+**Key Technical Concepts**:
+- React, FastAPI, MongoDB, JWT Authentication.
+- Dynamic permissions ().
+- Background tasks (Asyncio scheduler for auto-closing lives).
 
-**Key Technical Concepts**
--   **Backend:** FastAPI, Motor. Optimized database queries using  and aggregation pipelines to solve N+1 problems.
--   **Frontend:** React, Axios, Tailwind CSS,  for interactive graphs.
--   **Development Issue:** A persistent conflict with a babel plugin requires component simplification and separation as a standard workaround.
+**key DB schema**:
+- : {id, tenant_id, title, store, status, ...}
+- : {id, live_id, customer_id, item_name, price, commission, entry_source (live or liveshopping), ...}
+- : {id, tenant_id, role, permissions, ...}
+- : {id, tenant_id, user_id, amount, status, assigned_invoice_id, bank_reviewed, bank_reviewed_by, ...}
 
-**key DB schema**
--   **purchases**: The model was updated to allow editing of , , , and  post-creation.
+**changes in tech stack**:
+- None in this session.
 
-**changes in tech stack**
--   Added  library to the frontend for data visualization.
+**All files of reference**:
+-  (Contains all backend endpoints, updated for live locks, wallet review, live module, dashboard permissions)
+-  (Updated with admin password locks and UI spacing fixes)
+-  (Newly created for the fast product entry)
+-  (Updated with weekly deposit numbering and bank reviewed checkmarks)
+-  (Updated to hide money KPIs based on permissions)
+-  (Updated with direct ON/OFF Live module toggles on tenant cards)
+-  (Updated)
+-  (Testing agent report for Live module)
 
-**All files of reference**
--   : Major refactoring of 4 endpoints to fix N+1 issues. Added  and updated .
--   : Title and favicon link updated.
--   : New page for business statistics.
--   : New component for  graphs.
--   : Modified to allow full editing of purchase details in the edit modal.
--   : Heavily modified to show more shipment details and refactored to work around the babel error.
+**Areas that need refactoring**: 
+-  (Crucial technical debt: >10,000 lines).
 
-**Areas that need refactoring**
--    is still a monolith and is the top candidate for refactoring.
--    remains complex and sensitive to the build toolchain bug; further componentization could improve stability.
+**key api endpoints**:
+-  (creates live sessions)
+-  (handles bulk product entry for the new Live module)
+- 
+- 
+-  (returns user profile with granular permissions and tenant settings like )
+-  (toggles the bank review status of a deposit)
 
-**key api endpoints**
--   : (New) Provides aggregated stats for the admin dashboard.
--   : (Updated) Now accepts more fields for editing, including tax and commission details.
--   (Optimized) , , , .
+**Critical Info for New Agent**:
+- **Design Constraints:** Do not revert the shell styling (keep , desktop sidebar). The user explicitly asked to change the new Live module's color from bright red to an elegant pink/wine tone; do not revert it to red.
+- **Passwords:** Any logic requiring the Admin Password must accept the password of *any* user with the  role in that tenant, not just a specific hardcoded email.
+- **Testing Credentials:** Never expose actual passwords or tokens in your summary or responses. Read  when logging in. Use  for API checks.
 
-**Critical Info for New Agent**
--   **Logout Bug is P0:** The highest priority is fixing the bug where clients are logged out when viewing attachments. The user is frustrated, and this is a recurring complaint. The investigation should focus on how the file URL is handled by the browser and React Router.
--   **Babel Plugin Instability:** Be cautious when making significant JSX changes to a single component. The build toolchain is unstable. The established workaround is to break down complex UI into smaller, imported components.
+**documents and test reports created in this job**:
+- 
+- 
 
-**documents and test reports created in this job**
--   
--    (Updated)
-
-**Last 10 User Messages and any pending HUMAN messages**
--   : **(ACTIVE BUG)** when i want to see the attached file which was a video, in the client module in shipment, the session closes and i have to log in again, this is the second time im asking you and im spending credits
--   : continue (User prompting agent to continue a fix)
--   : User reported 3 issues: can't see attachment, can't see weight, wants product details in shipment view. (This led to the current bug).
--   : fix all the warnings (Request to fix N+1 performance issues).
--   : User requested a health check.
--   : User requested the ability to edit commission and taxes on an existing purchase.
--   : User requested interactive charts for the statistics panel.
--   : the client should see how many pounds are being sent in their shipment
--   : User confirmed priorities and provided new requirements for an admin stats dashboard.
--   : User provided the favicon image.
+**Last 10 User Messages and any pending HUMAN messages**:
+1. *User*: Cuando creo un nuevo live ya sea en Live o en Live shopping solo pideme el nombre de la tienda, y tu automaticamente para el nombre del live contruyes el nombre de la tienda + la fecha actual. (Done)
+2. *User*: y me muestras abajo solo se va a llamar el live. (Done)
+3. *User*: Verifica y dime los permisos de los Empleados, necesito definir bien que empleados pueden ver los numeros del negocio. es decir las cartas que se muestran arriba en el dashboard y las estadisticas (Agent explained the current permission gap)
+4. *User*: 1. solo un swich para ocultarlo 2. solo dinero (Agent applied  to hide Sales, Commissions, Shipments on dashboard)
+5. *User*: deja los mejores clientes (Agent reverted the Mejores Clientes widget to be always visible, asked if user wants to trigger deployment now. Pending human response).
 
 **Project Health Check:**
--   **Broken:** The view attachment feature for clients is critically broken, causing session logout.
--   **Mocked:** None.
+- Broken: None
+- Mocked: None
 
-**3rd Party Integrations**
--   
--   
--   
--    (newly added)
+**3rd Party Integrations**:
+- Gemini Vision / OCR — uses Emergent LLM Key (for deposit receipt reading).
 
-**Testing status**
--   **Testing agent used after significant changes:** YES (For statistics dashboard).
--   **Troubleshoot agent used after agent stuck in loop:** NO
--   **Test files created:** None.
--   **Known regressions:** The view attachments feature has regressed into a session-breaking bug.
+**Testing status**:
+- Testing agent used after significant changes: YES (Tested the new Live bulk entry module).
+- Troubleshoot agent used after agent stuck in loop: NO
+- Test files created: 
+- Known regressions: None
 
-**Credentials to test flow:**
--   **Admin:**  / 
--   **Cliente (Juan Perez):** ID  / 
+**Credentials to test flow**:
+Check .
 
-**What agent forgot to execute**
--   The implementation for viewing attachments is faulty and did not account for different file types or potential conflicts with the SPA routing, leading to a critical bug.</analysis>
+**What agent forgot to execute**:
+- The agent successfully implemented the user requests but did not add the admin password lock to *editing* purchases inside a finalized live (only delete/reactivate were secured).
+- The agent did not add the requested audit logs for when an admin uses their password to override a finalized live.</analysis>

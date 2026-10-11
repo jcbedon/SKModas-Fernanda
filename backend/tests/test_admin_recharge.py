@@ -8,7 +8,7 @@ import os
 import io
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://outlets-bug-fix.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://personal-shopper-13.preview.emergentagent.com')
 
 # Test credentials
 ADMIN_EMAIL = "admin@outletsusaec.com"
