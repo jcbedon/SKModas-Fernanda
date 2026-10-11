@@ -101,12 +101,13 @@ export default function AdminLiveModule() {
       // Group by item_name + price + commission to show unique products
       const grouped = {};
       purchases.forEach(p => {
-        const key = `${p.item_name}|${p.price}|${p.commission_amount || 0}`;
+        const commAmount = p.commission || p.commission_amount || 0;
+        const key = `${p.item_name}|${p.price}|${commAmount}`;
         if (!grouped[key]) {
           grouped[key] = {
             item_name: p.item_name,
             price: p.price,
-            commission: p.commission_amount || 0,
+            commission: commAmount,
             customers: [],
           };
         }
@@ -584,7 +585,16 @@ export default function AdminLiveModule() {
                   {selectedClients.length === 0 && (
                     <p className="text-sm text-slate-400 text-center py-4">Agrega los clientes que recibirán este producto.</p>
                   )}
-                  {selectedClients.map(c => (
+                  {selectedClients.map(c => {
+                    // Calculate: DEBE = Total Recargas - Total Compras
+                    // pending_to_invoice represents what they owe (purchases not yet invoiced)
+                    // wallet_balance is current balance
+                    // So: Total spent/owed = pending_to_invoice
+                    const totalDeposits = Number(c.wallet_balance || 0) + Number(c.pending_to_invoice || 0);
+                    const totalPurchases = Number(c.pending_to_invoice || 0);
+                    const calculatedOwes = totalPurchases;
+                    
+                    return (
                     <div key={c.customer_id}
                       className={`flex items-center justify-between p-3 rounded-xl border ${c.owes ? "border-red-200 bg-red-50/50" : "border-slate-200"}`}
                       data-testid={`live-client-chip-${c.customer_id}`}>
@@ -594,8 +604,8 @@ export default function AdminLiveModule() {
                         {c.loading ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
                         ) : c.owes ? (
-                          <Badge className="bg-red-100 text-red-700 text-[10px] flex items-center gap-1">
-                            <AlertTriangle className="h-3 w-3" /> Debe ${c.pending_to_invoice.toFixed(2)}
+                          <Badge className="bg-red-100 text-red-700 text-[10px] flex items-center gap-1" title={`Recargas: $${totalDeposits.toFixed(2)} - Compras: $${totalPurchases.toFixed(2)}`}>
+                            <AlertTriangle className="h-3 w-3" /> Debe ${calculatedOwes.toFixed(2)}
                           </Badge>
                         ) : (
                           <Badge className="bg-green-100 text-green-700 text-[10px] flex items-center gap-1">
@@ -610,7 +620,7 @@ export default function AdminLiveModule() {
                         </button>
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
 
                 <Button
@@ -652,18 +662,18 @@ export default function AdminLiveModule() {
                           </Badge>
                         </div>
                         
-                        <div className="flex items-center gap-3 text-xs text-slate-500 mb-3">
+                        <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
                           <span className="flex items-center gap-1">
                             <DollarSign className="h-3 w-3" />
                             {prod.price.toFixed(2)}
                           </span>
-                          {prod.commission > 0 && (
-                            <span className="text-green-600">
-                              +${prod.commission.toFixed(2)} com.
-                            </span>
-                          )}
-                          <span className="font-semibold text-slate-700">
-                            = ${(prod.price + prod.commission).toFixed(2)}
+                          <span className="text-slate-400">+</span>
+                          <span className="text-green-600">
+                            ${(prod.commission || 0).toFixed(2)}
+                          </span>
+                          <span className="text-slate-400">=</span>
+                          <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
+                            ${(prod.price + (prod.commission || 0)).toFixed(2)}
                           </span>
                         </div>
                         
