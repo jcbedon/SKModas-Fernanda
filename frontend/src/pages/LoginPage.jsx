@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/App";
-import { loginUser, seedSuperadmin } from "@/lib/api";
+import { loginUser } from "@/lib/api";
 import { toast } from "sonner";
 import { User, Lock, Eye, EyeOff, ShoppingBag, Shield, Truck, Headphones } from "lucide-react";
 
@@ -9,8 +9,8 @@ import { User, Lock, Eye, EyeOff, ShoppingBag, Shield, Truck, Headphones } from 
 const WHATSAPP_USA = "+12019954770";
 const WHATSAPP_ECUADOR = "+593998541082";
 
-// Logo URL - Didier Shop white logo
-const DIDIER_LOGO = "https://customer-assets-v7afamib.emergentagent.net/job_783f5be0-cb6a-4591-926c-0e17259f2605/artifacts/4131318e45b6a6e1_Logo_Didier_Shop_%28Blanco%29.png_2K_20261010194132.webp";
+// Logo URL - Didier Shop 3D logo with transparent background
+const DIDIER_LOGO = "https://static.prod-images.emergentagent.com/jobs/783f5be0-cb6a-4591-926c-0e17259f2605/images/42acb353a15e0bab737c2077e538080c67be796200d751bd8035cae86b363d10.jpeg";
 
 // Video URL
 const PROMO_VIDEO = "https://customer-assets-v7afamib.emergentagent.net/job_783f5be0-cb6a-4591-926c-0e17259f2605/artifacts/dbb507bb65a16b55_Woman_holding_shopping_bags_smiling_20261010221028.mp4";
@@ -61,15 +61,6 @@ export default function LoginPage() {
       toast.error(error.response?.data?.detail || "Error al iniciar sesión");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSeedSuperadmin = async () => {
-    try {
-      const response = await seedSuperadmin();
-      toast.success(`Superadmin creado: ${response.data.email}`);
-    } catch (error) {
-      toast.info(error.response?.data?.message || "Superadmin ya existe");
     }
   };
 
@@ -156,8 +147,8 @@ export default function LoginPage() {
                 <video
                   ref={videoRef}
                   src={PROMO_VIDEO}
-                  className="w-full h-auto"
-                  style={{ objectFit: 'contain' }}
+                  className="w-full h-auto block"
+                  style={{ objectFit: 'cover', display: 'block' }}
                   autoPlay={!prefersReducedMotion}
                   muted
                   loop
@@ -287,15 +278,6 @@ export default function LoginPage() {
                     <span>WhatsApp USA</span>
                   </button>
                 </div>
-                
-                {/* Seed superadmin - hidden but functional */}
-                <button
-                  onClick={handleSeedSuperadmin}
-                  data-testid="seed-superadmin-btn"
-                  className="mt-4 w-full text-xs text-gray-600 hover:text-gray-400 transition-colors"
-                >
-                  Crear Superadmin (demo)
-                </button>
               </div>
             </div>
             
@@ -332,8 +314,8 @@ export default function LoginPage() {
                   <video
                     ref={videoRef}
                     src={PROMO_VIDEO}
-                    className="w-full h-auto"
-                    style={{ objectFit: 'contain' }}
+                    className="w-full h-auto block"
+                    style={{ objectFit: 'cover', display: 'block' }}
                     autoPlay={!prefersReducedMotion}
                     muted
                     loop
@@ -467,15 +449,6 @@ export default function LoginPage() {
                     <span>WhatsApp USA</span>
                   </button>
                 </div>
-                
-                {/* Seed superadmin - hidden but functional */}
-                <button
-                  onClick={handleSeedSuperadmin}
-                  data-testid="seed-superadmin-btn"
-                  className="mt-5 w-full text-xs text-gray-600 hover:text-gray-400 transition-colors"
-                >
-                  Crear Superadmin (demo)
-                </button>
               </div>
             </div>
           </div>
@@ -484,20 +457,25 @@ export default function LoginPage() {
         {/* Footer benefits - Desktop only */}
         <footer className="hidden md:block pb-8 pt-4">
           <div className="max-w-[1240px] mx-auto px-6 lg:px-12">
-            <div className="flex items-center justify-center gap-8 lg:gap-16">
-              <div className="flex items-center gap-3">
-                <Shield className="w-6 h-6" style={{ color: '#F3AEC3' }} />
-                <span className="text-sm" style={{ color: '#C8C8CE' }}>100% Seguro</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-8 lg:gap-12">
+                <div className="flex items-center gap-3">
+                  <Shield className="w-5 h-5" style={{ color: '#F3AEC3' }} />
+                  <span className="text-sm" style={{ color: '#C8C8CE' }}>100% Seguro</span>
+                </div>
+                <div className="w-px h-4 bg-gray-700"></div>
+                <div className="flex items-center gap-3">
+                  <Truck className="w-5 h-5" style={{ color: '#F3AEC3' }} />
+                  <span className="text-sm" style={{ color: '#C8C8CE' }}>Envíos confiables</span>
+                </div>
+                <div className="w-px h-4 bg-gray-700"></div>
+                <div className="flex items-center gap-3">
+                  <Headphones className="w-5 h-5" style={{ color: '#F3AEC3' }} />
+                  <span className="text-sm" style={{ color: '#C8C8CE' }}>Soporte personalizado</span>
+                </div>
               </div>
-              <div className="w-px h-5 bg-gray-700"></div>
-              <div className="flex items-center gap-3">
-                <Truck className="w-6 h-6" style={{ color: '#F3AEC3' }} />
-                <span className="text-sm" style={{ color: '#C8C8CE' }}>Envíos confiables</span>
-              </div>
-              <div className="w-px h-5 bg-gray-700"></div>
-              <div className="flex items-center gap-3">
-                <Headphones className="w-6 h-6" style={{ color: '#F3AEC3' }} />
-                <span className="text-sm" style={{ color: '#C8C8CE' }}>Soporte personalizado</span>
+              <div className="text-xs" style={{ color: '#6B7280' }}>
+                © {new Date().getFullYear()} Outlets USA EC LLC. All rights reserved.
               </div>
             </div>
           </div>
