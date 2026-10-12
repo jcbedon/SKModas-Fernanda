@@ -1232,7 +1232,7 @@ export default function SuperadminDashboard() {
 
         {/* Invoice Settings Dialog */}
         <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
-          <DialogContent className="rounded-2xl max-w-md">
+          <DialogContent className="rounded-2xl max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5 text-blue-600" />
@@ -1448,12 +1448,12 @@ export default function SuperadminDashboard() {
                     {/* Late fee per shipping category */}
                     <div>
                       <Label className="text-xs text-amber-800 font-semibold mb-2 block">Recargo por Categoría de Envío</Label>
-                      <div className="space-y-2">
+                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                         {(tenantSettings.shipping_categories || []).map((cat, idx) => (
-                          <div key={cat.key || idx} className="flex items-center gap-3 p-2 bg-white rounded-lg border border-amber-200">
-                            <span className="w-24 text-sm font-bold text-gray-700">{cat.key}</span>
-                            <span className="flex-1 text-xs text-gray-500 truncate">{cat.label}</span>
-                            <div className="flex items-center gap-1">
+                          <div key={cat.key || idx} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-amber-200">
+                            <span className="w-10 text-sm font-bold text-amber-700 shrink-0">{cat.key}</span>
+                            <span className="flex-1 text-xs text-gray-500 truncate min-w-0">{cat.label}</span>
+                            <div className="flex items-center gap-1 shrink-0">
                               <span className="text-sm text-gray-500">$</span>
                               <Input
                                 type="number"
@@ -1465,13 +1465,13 @@ export default function SuperadminDashboard() {
                                   newCategories[idx] = { ...cat, late_fee: parseFloat(e.target.value) || 0 };
                                   setTenantSettings({...tenantSettings, shipping_categories: newCategories});
                                 }}
-                                className="h-8 w-20 text-center font-bold rounded"
+                                className="h-8 w-16 text-center font-bold rounded text-sm"
                               />
                             </div>
                           </div>
                         ))}
                         {(!tenantSettings.shipping_categories || tenantSettings.shipping_categories.length === 0) && (
-                          <p className="text-xs text-amber-600 italic">No hay categorías de envío configuradas. Configúralas en "Categorías de Envío".</p>
+                          <p className="text-xs text-amber-600 italic">No hay categorías de envío configuradas.</p>
                         )}
                       </div>
                     </div>
