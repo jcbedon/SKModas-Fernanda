@@ -43,45 +43,45 @@ export default function AdminInventorySelect() {
           <p className="text-gray-500">Elige la ubicación para gestionar productos y ventas</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+        <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
           {/* Ecuador */}
           <Card 
-            className="rounded-2xl cursor-pointer hover:shadow-xl transition-all duration-300 hover:scale-105 border-2 border-transparent hover:border-green-400 overflow-hidden"
+            className="rounded-xl cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-105 border-2 border-transparent hover:border-green-400 overflow-hidden"
             onClick={() => navigate("/admin/inventory/ecuador")}
             data-testid="inventory-ecuador-card"
           >
             <CardContent className="p-0">
-              <div className="bg-gradient-to-br from-green-500 to-green-600 p-6 flex justify-center items-center">
+              <div className="bg-gradient-to-br from-green-500 to-green-600 p-3 flex justify-center items-center">
                 <img 
-                  src="https://flagcdn.com/w160/ec.png" 
+                  src="https://flagcdn.com/w80/ec.png" 
                   alt="Ecuador" 
-                  className="h-20 rounded shadow-lg"
+                  className="h-10 rounded shadow-md"
                 />
               </div>
-              <div className="p-6 text-center bg-white">
-                <h2 className="text-xl font-bold text-slate-800 mb-1">Ecuador</h2>
-                <p className="text-sm text-gray-500">Productos y ventas en Ecuador</p>
+              <div className="p-3 text-center bg-white">
+                <h2 className="text-base font-bold text-slate-800">Ecuador</h2>
+                <p className="text-xs text-gray-500">Inventario EC</p>
               </div>
             </CardContent>
           </Card>
 
           {/* USA */}
           <Card 
-            className="rounded-2xl cursor-pointer hover:shadow-xl transition-all duration-300 hover:scale-105 border-2 border-transparent hover:border-blue-400 overflow-hidden"
+            className="rounded-xl cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-105 border-2 border-transparent hover:border-blue-400 overflow-hidden"
             onClick={() => navigate("/admin/inventory/usa")}
             data-testid="inventory-usa-card"
           >
             <CardContent className="p-0">
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 flex justify-center items-center">
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-3 flex justify-center items-center">
                 <img 
-                  src="https://flagcdn.com/w160/us.png" 
+                  src="https://flagcdn.com/w80/us.png" 
                   alt="USA" 
-                  className="h-20 rounded shadow-lg"
+                  className="h-10 rounded shadow-md"
                 />
               </div>
-              <div className="p-6 text-center bg-white">
-                <h2 className="text-xl font-bold text-slate-800 mb-1">USA</h2>
-                <p className="text-sm text-gray-500">Productos y ventas en Estados Unidos</p>
+              <div className="p-3 text-center bg-white">
+                <h2 className="text-base font-bold text-slate-800">USA</h2>
+                <p className="text-xs text-gray-500">Inventario US</p>
               </div>
             </CardContent>
           </Card>

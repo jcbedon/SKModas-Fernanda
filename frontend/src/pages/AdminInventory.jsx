@@ -773,7 +773,7 @@ export default function AdminInventory() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setProductDialog(false)}>Cancelar</Button>
-            <Button onClick={handleSaveProduct} data-testid="save-product-btn">{editingProduct ? "Actualizar" : "Crear"}</Button>
+            <Button onClick={handleSaveProduct} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="save-product-btn">{editingProduct ? "Actualizar" : "Crear"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -831,7 +831,7 @@ export default function AdminInventory() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setStockDialog(false)}>Cancelar</Button>
-            <Button onClick={handleAdjustStock} data-testid="confirm-adjustment-btn">Aplicar</Button>
+            <Button onClick={handleAdjustStock} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="confirm-adjustment-btn">Aplicar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1000,7 +1000,6 @@ export default function AdminInventory() {
                     </div>
                   );
                 })}
-                })}
               </div>
             </div>
 
@@ -1068,7 +1067,7 @@ export default function AdminInventory() {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => setAlertsDialog(false)}>Cerrar</Button>
+            <Button onClick={() => setAlertsDialog(false)} className="bg-slate-700 hover:bg-slate-800 text-white">Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
