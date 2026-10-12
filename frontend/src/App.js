@@ -28,6 +28,7 @@ import AdminDepositMaintenance from "@/pages/AdminDepositMaintenance";
 import AdminInventory from "@/pages/AdminInventory";
 import AdminInventoryStats from "@/pages/AdminInventoryStats";
 import AdminInventorySelect from "@/pages/AdminInventorySelect";
+import AdminInventoryHistory from "@/pages/AdminInventoryHistory";
 import SuperadminDashboard from "@/pages/SuperadminDashboard";
 import { BrandBackgroundVideo } from "@/components/BrandBackgroundVideo";
 import AstridSidebar from "@/components/AstridSidebar";
@@ -221,6 +222,7 @@ function App() {
           <Route path="/admin/bank-accounts" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminBankAccounts /></ProtectedRoute>} />
           <Route path="/admin/deposit-maintenance" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDepositMaintenance /></ProtectedRoute>} />
           <Route path="/admin/inventory" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventorySelect /></ProtectedRoute>} />
+          <Route path="/admin/inventory/history" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventoryHistory /></ProtectedRoute>} />
           <Route path="/admin/inventory/:location" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventory /></ProtectedRoute>} />
           <Route path="/admin/inventory-stats/:location" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventoryStats /></ProtectedRoute>} />
 

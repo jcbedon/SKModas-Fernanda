@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/App";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Boxes } from "lucide-react";
+import { ArrowLeft, Boxes, History } from "lucide-react";
 
 const DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_compraenvivo/artifacts/qvyfsb43_WhatsApp%20Image%202026-02-03%20at%208.05.08%20PM.jpeg";
 
@@ -21,6 +21,18 @@ export default function AdminInventorySelect() {
           </Button>
           <img src={logoUrl} alt="Logo" className="h-10 object-contain" />
           <span className="font-bold text-slate-800">Inventario</span>
+          <div className="ml-auto">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2"
+              onClick={() => navigate("/admin/inventory/history")}
+              data-testid="history-btn"
+            >
+              <History className="h-4 w-4" />
+              Historial
+            </Button>
+          </div>
         </div>
       </div>
 

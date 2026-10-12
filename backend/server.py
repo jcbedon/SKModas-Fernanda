@@ -10568,6 +10568,30 @@ async def create_inventory_sale(data: InventorySaleCreate, user=Depends(get_curr
         }
     )
     
+    # Log to audit
+    await db.audit_logs.insert_one({
+        "id": str(uuid.uuid4()),
+        "tenant_id": user["tenant_id"],
+        "user_id": user.get("user_id"),
+        "user_name": user.get("name", "Admin"),
+        "user_role": user.get("role", "admin"),
+        "action": "inventory_sale",
+        "entity_type": "inventory_product",
+        "entity_id": data.product_id,
+        "entity_name": product["name"],
+        "details": {
+            "sale_id": sale.id,
+            "quantity": data.quantity,
+            "unit_price": unit_price,
+            "total_amount": total_amount,
+            "profit": profit,
+            "location": location,
+            "customer_id": data.customer_id,
+            "customer_name": customer_name
+        },
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
     return {"message": "Venta registrada", "sale": sale.model_dump()}
 
 
@@ -11045,6 +11069,28 @@ async def create_purchases_from_inventory(
             sold_by_name=user.get("name")
         )
         await db.inventory_sales.insert_one(sale.model_dump())
+        
+        # Log to audit
+        await db.audit_logs.insert_one({
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "user_id": user.get("user_id"),
+            "user_name": user.get("name", "Admin"),
+            "user_role": user.get("role", "admin"),
+            "action": "inventory_invoice_purchase",
+            "entity_type": "inventory_product",
+            "entity_id": product_id,
+            "entity_name": product["name"],
+            "details": {
+                "quantity": quantity,
+                "customer_id": customer_id,
+                "customer_name": customer.get("name"),
+                "total_amount": price_with_tax * quantity,
+                "location": product.get("location", "ecuador"),
+                "purchases_created": quantity
+            },
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
     
     # Check for low stock alerts
     low_stock_alerts = []
@@ -11093,6 +11139,53 @@ async def get_low_stock_alerts(
         "threshold": threshold,
         "count": len(products),
         "products": products
+    }
+
+
+@api_router.get("/inventory/movement-history")
+async def get_inventory_movement_history(
+    location: Optional[str] = None,
+    action_type: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = 100,
+    user=Depends(get_current_user)
+):
+    """Get inventory movement history from audit logs.
+    action_type can be: inventory_sale, inventory_transfer, inventory_stock_adjustment, inventory_invoice_purchase
+    """
+    query = {
+        "tenant_id": user["tenant_id"],
+        "action": {"$in": [
+            "inventory_sale",
+            "inventory_transfer", 
+            "inventory_stock_adjustment",
+            "inventory_invoice_purchase"
+        ]}
+    }
+    
+    if action_type:
+        query["action"] = action_type
+    
+    if location:
+        query["$or"] = [
+            {"details.location": location},
+            {"details.source_location": location},
+            {"details.target_location": location}
+        ]
+    
+    if start_date or end_date:
+        query["created_at"] = {}
+        if start_date:
+            query["created_at"]["$gte"] = start_date
+        if end_date:
+            query["created_at"]["$lte"] = end_date
+    
+    logs = await db.audit_logs.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    
+    return {
+        "count": len(logs),
+        "movements": logs
     }
 
 

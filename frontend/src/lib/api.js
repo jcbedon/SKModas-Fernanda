@@ -273,5 +273,7 @@ export const createPurchasesFromInventory = (items, customerId) =>
   api.post("/inventory/create-purchases", { items, customer_id: customerId });
 export const getLowStockAlerts = (threshold = 5, location = null) => 
   api.get("/inventory/low-stock-alerts", { params: { threshold, location } });
+export const getInventoryMovementHistory = (params = {}) =>
+  api.get("/inventory/movement-history", { params });
 
 export default api;
