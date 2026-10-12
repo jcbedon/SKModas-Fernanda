@@ -1,0 +1,22 @@
+{
+  "summary": "Verified fix for 'Recargo por Mora' section layout in Factura settings dialog on SuperadminDashboard. Logged in as superadmin, opened Factura dialog for DidierShop, activated 'Habilitar Recargo por Mora' toggle and inspected layout. Dialog scrolls correctly (scrollHeight 1379 > clientHeight 970). Amber bordered box (border-amber-200) fully contains all 3 shipping categories (G, A, B) with 0 overflowing inputs/rows. Category fee inputs are aligned, editable (set G=5.50, Vista Previa updated accordingly), and 'Guardar Configuración' button is visible after scrolling.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "The inner categories list uses max-h-48 overflow-y-auto. With only 3 categories, scrolling inside this list is not needed (scrollInfo.canScroll=false). Fine as-is; dialog-level scroll handles longer lists. If tenants have >6 shipping categories, inner scroll will activate. Consider adding scrollbar styling for better UX, but not blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "superadmin@outletsusaec.com / super123",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fix verified for DidierShop tenant which has 3 shipping categories (G, A, B). If a tenant with many categories (>6) is available, retest to confirm inner max-h-48 scroll works with abundant categories.",
+  "rca of the issue": "Original: DialogContent lacked max-h/overflow-y-auto so long content was clipped; late fee category inputs weren't constrained inside the amber card, causing visual overflow. Fix applied: DialogContent now uses 'max-w-lg max-h-[90vh] overflow-y-auto' allowing full dialog scroll; the categories list uses 'max-h-48 overflow-y-auto' with flex rows (shrink-0 for key/input, min-w-0 flex-1 truncate for label) ensuring inputs stay inside the amber container."
+}

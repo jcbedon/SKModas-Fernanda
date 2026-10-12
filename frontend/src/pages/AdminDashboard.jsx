@@ -28,7 +28,8 @@ import {
   Search,
   ShoppingBag,
   Landmark,
-  Video
+  Video,
+  Boxes
 } from "lucide-react";
 import { uploadTenantLogo } from "@/lib/api";
 import { useRefreshOnTabFocus } from "@/hooks/useRefreshOnTabFocus";
@@ -195,6 +196,7 @@ export default function AdminDashboard() {
       { icon: FileText, label: "Facturas", path: "/admin/invoices", color: "#3498DB", description: "Buscar y gestionar facturas", permission: "manage_invoices" },
       { icon: Wallet, label: "Recargas", path: "/admin/wallet", color: "#2ECC71", description: "Aprobar depósitos", permission: "approve_recharges" },
       { icon: Truck, label: "Envíos", path: "/admin/shipments", color: "#1E3A5F", description: "Gestionar envíos", permission: "manage_shipments" },
+      { icon: Boxes, label: "Inventario", path: "/admin/inventory", color: "#0891B2", description: "Productos y ventas de inventario", permission: "manage_inventory" },
       { icon: Gift, label: "Referidos", path: "/admin/referrals", color: "#27ae60", description: "Configurar bonos", permission: "manage_referrals" },
       { icon: BarChart3, label: "Reportes", path: "/admin/reports", color: "#2a4f7f", description: "Ver estadísticas", permission: "view_reports" },
       { icon: TrendingUp, label: "Estadisticas", path: "/admin/stats", color: "#E74C3C", description: "Ver ganancias del negocio", permission: "view_statistics" },

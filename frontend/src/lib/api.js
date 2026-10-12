@@ -253,4 +253,17 @@ export const updateTenantTrackingUrl = (tenantId, trackingUrl) =>
   api.put(`/superadmin/tenants/${tenantId}/tracking-url`, { tracking_url_template: trackingUrl });
 export const getTenantDetails = (tenantId) => api.get(`/superadmin/tenants/${tenantId}/details`);
 
+// Inventory
+export const getInventoryProducts = () => api.get("/inventory/products");
+export const getInventoryProduct = (productId) => api.get(`/inventory/products/${productId}`);
+export const createInventoryProduct = (data) => api.post("/inventory/products", data);
+export const updateInventoryProduct = (productId, data) => api.put(`/inventory/products/${productId}`, data);
+export const deleteInventoryProduct = (productId) => api.delete(`/inventory/products/${productId}`);
+export const adjustInventoryStock = (productId, adjustment, location, reason) => 
+  api.post(`/inventory/products/${productId}/adjust-stock`, { adjustment, location, reason });
+export const getInventorySales = (params = {}) => api.get("/inventory/sales", { params });
+export const createInventorySale = (data) => api.post("/inventory/sales", data);
+export const deleteInventorySale = (saleId) => api.delete(`/inventory/sales/${saleId}`);
+export const getInventoryStats = (period = "week") => api.get("/inventory/stats", { params: { period } });
+
 export default api;

@@ -25,6 +25,8 @@ import AdminPackagesReport from "@/pages/AdminPackagesReport";
 import AdminPendingShipments from "@/pages/AdminPendingShipments";
 import AdminBankAccounts from "@/pages/AdminBankAccounts";
 import AdminDepositMaintenance from "@/pages/AdminDepositMaintenance";
+import AdminInventory from "@/pages/AdminInventory";
+import AdminInventoryStats from "@/pages/AdminInventoryStats";
 import SuperadminDashboard from "@/pages/SuperadminDashboard";
 import { BrandBackgroundVideo } from "@/components/BrandBackgroundVideo";
 import AstridSidebar from "@/components/AstridSidebar";
@@ -217,6 +219,8 @@ function App() {
           <Route path="/admin/pending-shipments" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminPendingShipments /></ProtectedRoute>} />
           <Route path="/admin/bank-accounts" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminBankAccounts /></ProtectedRoute>} />
           <Route path="/admin/deposit-maintenance" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDepositMaintenance /></ProtectedRoute>} />
+          <Route path="/admin/inventory" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventory /></ProtectedRoute>} />
+          <Route path="/admin/inventory-stats" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventoryStats /></ProtectedRoute>} />
 
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />

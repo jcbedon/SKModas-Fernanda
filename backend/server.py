@@ -549,6 +549,82 @@ class AuditLog(BaseModel):
     ip_address: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
+# ==================== INVENTORY MODELS ====================
+
+class InventoryProduct(BaseModel):
+    """Inventory product for tracking stock and sales"""
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tenant_id: str
+    name: str
+    cost: float  # Cost price (what the business paid)
+    sale_price: float  # Sale price to customers
+    tax_rate: float = 0.0  # Tax rate (e.g., 0.0825 for 8.25%)
+    stock_ecuador: int = 0  # Stock available in Ecuador
+    stock_usa: int = 0  # Stock available in USA
+    sku: Optional[str] = None  # Optional SKU/barcode
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    is_active: bool = True
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: Optional[str] = None
+
+
+class InventorySale(BaseModel):
+    """Record of an inventory product sale"""
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tenant_id: str
+    product_id: str
+    product_name: str  # Snapshot of product name at time of sale
+    customer_id: Optional[str] = None  # Optional link to a client
+    customer_name: Optional[str] = None
+    quantity: int = 1
+    unit_cost: float  # Cost at time of sale
+    unit_price: float  # Sale price at time of sale
+    tax_rate: float = 0.0
+    tax_amount: float = 0.0
+    total_amount: float  # quantity * unit_price + tax
+    profit: float  # (unit_price - unit_cost) * quantity
+    location: str = "ecuador"  # "ecuador" or "usa"
+    invoice_id: Optional[str] = None  # Link to invoice if added to one
+    notes: Optional[str] = None
+    sold_by: Optional[str] = None  # User who made the sale
+    sold_by_name: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class InventoryProductCreate(BaseModel):
+    name: str
+    cost: float
+    sale_price: float
+    tax_rate: float = 0.0
+    stock_ecuador: int = 0
+    stock_usa: int = 0
+    sku: Optional[str] = None
+    description: Optional[str] = None
+
+
+class InventoryProductUpdate(BaseModel):
+    name: Optional[str] = None
+    cost: Optional[float] = None
+    sale_price: Optional[float] = None
+    tax_rate: Optional[float] = None
+    stock_ecuador: Optional[int] = None
+    stock_usa: Optional[int] = None
+    sku: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class InventorySaleCreate(BaseModel):
+    product_id: str
+    customer_id: Optional[str] = None
+    quantity: int = 1
+    location: str = "ecuador"  # "ecuador" or "usa"
+    notes: Optional[str] = None
+
+
 # ==================== REQUEST MODELS ====================
 
 class UserLogin(BaseModel):
@@ -10340,6 +10416,410 @@ async def diagnose_invoice(invoice_id: str, current_user: dict = Depends(get_cur
             "wallet_tx_count": len(wallet_txs),
         }
     }
+
+# ==================== INVENTORY ENDPOINTS ====================
+
+@api_router.get("/inventory/products")
+async def get_inventory_products(user=Depends(get_current_user)):
+    """Get all inventory products for the tenant"""
+    products = await db.inventory_products.find(
+        {"tenant_id": user["tenant_id"]},
+        {"_id": 0}
+    ).sort("name", 1).to_list(1000)
+    return products
+
+
+@api_router.get("/inventory/products/{product_id}")
+async def get_inventory_product(product_id: str, user=Depends(get_current_user)):
+    """Get a single inventory product"""
+    product = await db.inventory_products.find_one(
+        {"id": product_id, "tenant_id": user["tenant_id"]},
+        {"_id": 0}
+    )
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    return product
+
+
+@api_router.post("/inventory/products")
+async def create_inventory_product(data: InventoryProductCreate, user=Depends(get_current_user)):
+    """Create a new inventory product"""
+    product = InventoryProduct(
+        tenant_id=user["tenant_id"],
+        name=data.name,
+        cost=data.cost,
+        sale_price=data.sale_price,
+        tax_rate=data.tax_rate,
+        stock_ecuador=data.stock_ecuador,
+        stock_usa=data.stock_usa,
+        sku=data.sku,
+        description=data.description
+    )
+    await db.inventory_products.insert_one(product.model_dump())
+    return {"message": "Producto creado", "product": product.model_dump()}
+
+
+@api_router.put("/inventory/products/{product_id}")
+async def update_inventory_product(product_id: str, data: InventoryProductUpdate, user=Depends(get_current_user)):
+    """Update an inventory product"""
+    product = await db.inventory_products.find_one(
+        {"id": product_id, "tenant_id": user["tenant_id"]}
+    )
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if update_data:
+        update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await db.inventory_products.update_one(
+            {"id": product_id},
+            {"$set": update_data}
+        )
+    
+    updated = await db.inventory_products.find_one({"id": product_id}, {"_id": 0})
+    return {"message": "Producto actualizado", "product": updated}
+
+
+@api_router.delete("/inventory/products/{product_id}")
+async def delete_inventory_product(product_id: str, user=Depends(get_current_user)):
+    """Delete an inventory product (soft delete by setting inactive)"""
+    result = await db.inventory_products.update_one(
+        {"id": product_id, "tenant_id": user["tenant_id"]},
+        {"$set": {"is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    return {"message": "Producto eliminado"}
+
+
+@api_router.post("/inventory/sales")
+async def create_inventory_sale(data: InventorySaleCreate, user=Depends(get_current_user)):
+    """Record a sale of an inventory product"""
+    # Get the product
+    product = await db.inventory_products.find_one(
+        {"id": data.product_id, "tenant_id": user["tenant_id"]}
+    )
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    
+    # Check stock availability
+    stock_field = f"stock_{data.location}"
+    current_stock = product.get(stock_field, 0)
+    if current_stock < data.quantity:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Stock insuficiente en {data.location}. Disponible: {current_stock}"
+        )
+    
+    # Get customer info if provided
+    customer_name = None
+    if data.customer_id:
+        customer = await db.users.find_one({"customer_id": data.customer_id, "tenant_id": user["tenant_id"]})
+        if customer:
+            customer_name = customer.get("name")
+    
+    # Calculate amounts
+    unit_cost = product["cost"]
+    unit_price = product["sale_price"]
+    tax_rate = product.get("tax_rate", 0)
+    subtotal = data.quantity * unit_price
+    tax_amount = subtotal * tax_rate
+    total_amount = subtotal + tax_amount
+    profit = (unit_price - unit_cost) * data.quantity
+    
+    # Create sale record
+    sale = InventorySale(
+        tenant_id=user["tenant_id"],
+        product_id=data.product_id,
+        product_name=product["name"],
+        customer_id=data.customer_id,
+        customer_name=customer_name,
+        quantity=data.quantity,
+        unit_cost=unit_cost,
+        unit_price=unit_price,
+        tax_rate=tax_rate,
+        tax_amount=tax_amount,
+        total_amount=total_amount,
+        profit=profit,
+        location=data.location,
+        notes=data.notes,
+        sold_by=user.get("user_id"),
+        sold_by_name=user.get("name")
+    )
+    
+    await db.inventory_sales.insert_one(sale.model_dump())
+    
+    # Reduce stock
+    await db.inventory_products.update_one(
+        {"id": data.product_id},
+        {
+            "$inc": {stock_field: -data.quantity},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+    
+    return {"message": "Venta registrada", "sale": sale.model_dump()}
+
+
+@api_router.get("/inventory/sales")
+async def get_inventory_sales(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    product_id: Optional[str] = None,
+    user=Depends(get_current_user)
+):
+    """Get inventory sales with optional filters"""
+    query = {"tenant_id": user["tenant_id"]}
+    
+    if product_id:
+        query["product_id"] = product_id
+    
+    if start_date or end_date:
+        query["created_at"] = {}
+        if start_date:
+            query["created_at"]["$gte"] = start_date
+        if end_date:
+            query["created_at"]["$lte"] = end_date
+    
+    sales = await db.inventory_sales.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return sales
+
+
+@api_router.delete("/inventory/sales/{sale_id}")
+async def delete_inventory_sale(sale_id: str, user=Depends(get_current_user)):
+    """Delete an inventory sale and restore stock"""
+    sale = await db.inventory_sales.find_one(
+        {"id": sale_id, "tenant_id": user["tenant_id"]}
+    )
+    if not sale:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+    
+    # Restore stock
+    stock_field = f"stock_{sale['location']}"
+    await db.inventory_products.update_one(
+        {"id": sale["product_id"]},
+        {
+            "$inc": {stock_field: sale["quantity"]},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+    
+    # Delete sale
+    await db.inventory_sales.delete_one({"id": sale_id})
+    
+    return {"message": "Venta eliminada y stock restaurado"}
+
+
+@api_router.get("/inventory/stats")
+async def get_inventory_stats(
+    period: str = "week",
+    user=Depends(get_current_user)
+):
+    """Get inventory statistics - weekly by default like other modules"""
+    tenant_id = user["tenant_id"]
+    
+    # Calculate date range based on period
+    now = datetime.now(timezone.utc)
+    
+    if period == "week":
+        # Current week (Monday to Sunday)
+        days_since_monday = now.weekday()
+        week_start = (now - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = week_start.isoformat()
+        end_date = now.isoformat()
+    elif period == "month":
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+        end_date = now.isoformat()
+    elif period == "all":
+        start_date = None
+        end_date = None
+    else:
+        # Try to parse as week offset (w1, w2, etc.)
+        if period.startswith("w"):
+            try:
+                weeks_back = int(period[1:])
+                days_since_monday = now.weekday()
+                current_week_start = (now - timedelta(days=days_since_monday)).replace(hour=0, minute=0, second=0, microsecond=0)
+                week_start = current_week_start - timedelta(weeks=weeks_back)
+                week_end = week_start + timedelta(days=7)
+                start_date = week_start.isoformat()
+                end_date = week_end.isoformat()
+            except ValueError:
+                start_date = None
+                end_date = None
+        else:
+            start_date = None
+            end_date = None
+    
+    # Build query
+    query = {"tenant_id": tenant_id}
+    if start_date:
+        query["created_at"] = {"$gte": start_date}
+        if end_date:
+            query["created_at"]["$lte"] = end_date
+    
+    # Get all sales in period
+    sales = await db.inventory_sales.find(query, {"_id": 0}).to_list(10000)
+    
+    # Calculate totals
+    total_sales = sum(s.get("total_amount", 0) for s in sales)
+    total_cost = sum(s.get("unit_cost", 0) * s.get("quantity", 1) for s in sales)
+    total_profit = sum(s.get("profit", 0) for s in sales)
+    total_tax = sum(s.get("tax_amount", 0) for s in sales)
+    total_quantity = sum(s.get("quantity", 1) for s in sales)
+    
+    # Products sold breakdown
+    products_sold = {}
+    for s in sales:
+        pid = s.get("product_id")
+        pname = s.get("product_name", "Unknown")
+        if pid not in products_sold:
+            products_sold[pid] = {
+                "product_id": pid,
+                "product_name": pname,
+                "quantity": 0,
+                "total_sales": 0,
+                "total_cost": 0,
+                "profit": 0
+            }
+        products_sold[pid]["quantity"] += s.get("quantity", 1)
+        products_sold[pid]["total_sales"] += s.get("total_amount", 0)
+        products_sold[pid]["total_cost"] += s.get("unit_cost", 0) * s.get("quantity", 1)
+        products_sold[pid]["profit"] += s.get("profit", 0)
+    
+    # Sort by quantity sold
+    top_products = sorted(products_sold.values(), key=lambda x: x["quantity"], reverse=True)[:20]
+    
+    # Calculate margin per product
+    for p in top_products:
+        if p["total_sales"] > 0:
+            p["margin_percent"] = round((p["profit"] / p["total_sales"]) * 100, 1)
+        else:
+            p["margin_percent"] = 0
+    
+    # Daily breakdown for charts
+    daily_sales = {}
+    for s in sales:
+        date_str = s.get("created_at", "")[:10]  # YYYY-MM-DD
+        if date_str not in daily_sales:
+            daily_sales[date_str] = {"date": date_str, "sales": 0, "profit": 0, "quantity": 0}
+        daily_sales[date_str]["sales"] += s.get("total_amount", 0)
+        daily_sales[date_str]["profit"] += s.get("profit", 0)
+        daily_sales[date_str]["quantity"] += s.get("quantity", 1)
+    
+    daily_trend = sorted(daily_sales.values(), key=lambda x: x["date"])
+    
+    # Get current stock levels
+    products = await db.inventory_products.find(
+        {"tenant_id": tenant_id, "is_active": True},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    total_stock_ecuador = sum(p.get("stock_ecuador", 0) for p in products)
+    total_stock_usa = sum(p.get("stock_usa", 0) for p in products)
+    total_stock_value = sum(
+        p.get("cost", 0) * (p.get("stock_ecuador", 0) + p.get("stock_usa", 0))
+        for p in products
+    )
+    
+    # Low stock alerts (less than 5 units)
+    low_stock = [
+        {
+            "id": p["id"],
+            "name": p["name"],
+            "stock_ecuador": p.get("stock_ecuador", 0),
+            "stock_usa": p.get("stock_usa", 0),
+            "total_stock": p.get("stock_ecuador", 0) + p.get("stock_usa", 0)
+        }
+        for p in products
+        if (p.get("stock_ecuador", 0) + p.get("stock_usa", 0)) < 5
+    ]
+    
+    return {
+        "period": period,
+        "start_date": start_date,
+        "end_date": end_date,
+        "summary": {
+            "total_sales": round(total_sales, 2),
+            "total_cost": round(total_cost, 2),
+            "total_profit": round(total_profit, 2),
+            "total_tax": round(total_tax, 2),
+            "total_quantity": total_quantity,
+            "sale_count": len(sales),
+            "margin_percent": round((total_profit / total_sales * 100) if total_sales > 0 else 0, 1)
+        },
+        "stock": {
+            "ecuador": total_stock_ecuador,
+            "usa": total_stock_usa,
+            "total_value": round(total_stock_value, 2),
+            "product_count": len(products)
+        },
+        "top_products": top_products,
+        "low_stock_alerts": low_stock,
+        "daily_trend": daily_trend
+    }
+
+
+@api_router.post("/inventory/products/{product_id}/adjust-stock")
+async def adjust_inventory_stock(
+    product_id: str,
+    adjustment: int = Body(..., embed=True),
+    location: str = Body(..., embed=True),
+    reason: str = Body(None, embed=True),
+    user=Depends(get_current_user)
+):
+    """Manually adjust stock (positive to add, negative to remove)"""
+    product = await db.inventory_products.find_one(
+        {"id": product_id, "tenant_id": user["tenant_id"]}
+    )
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    
+    stock_field = f"stock_{location}"
+    current_stock = product.get(stock_field, 0)
+    new_stock = current_stock + adjustment
+    
+    if new_stock < 0:
+        raise HTTPException(status_code=400, detail="El ajuste resultaría en stock negativo")
+    
+    await db.inventory_products.update_one(
+        {"id": product_id},
+        {
+            "$set": {
+                stock_field: new_stock,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+    )
+    
+    # Log the adjustment
+    await db.audit_logs.insert_one({
+        "id": str(uuid.uuid4()),
+        "tenant_id": user["tenant_id"],
+        "user_id": user.get("user_id"),
+        "user_name": user.get("name", "Admin"),
+        "user_role": user.get("role", "admin"),
+        "action": "inventory_stock_adjustment",
+        "entity_type": "inventory_product",
+        "entity_id": product_id,
+        "entity_name": product["name"],
+        "details": {
+            "location": location,
+            "previous_stock": current_stock,
+            "adjustment": adjustment,
+            "new_stock": new_stock,
+            "reason": reason
+        },
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {
+        "message": "Stock ajustado",
+        "previous_stock": current_stock,
+        "adjustment": adjustment,
+        "new_stock": new_stock
+    }
+
 
 app.include_router(api_router)
 
