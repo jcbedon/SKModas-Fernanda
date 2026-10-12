@@ -101,6 +101,7 @@ export default function AdminInventory() {
   const [selectedClient, setSelectedClient] = useState(null);
   const [clientSearch, setClientSearch] = useState("");
   const [invoiceItems, setInvoiceItems] = useState([]);
+  const [invoiceProductSearch, setInvoiceProductSearch] = useState("");
   
   // Transfer data
   const [targetProducts, setTargetProducts] = useState([]);
@@ -353,6 +354,7 @@ export default function AdminInventory() {
     setSelectedClient(null);
     setClientSearch("");
     setInvoiceItems([]);
+    setInvoiceProductSearch("");
     loadClients();
     setInvoiceDialog(true);
   };
@@ -942,8 +944,26 @@ export default function AdminInventory() {
             <div>
               <Label className="font-semibold">2. Seleccionar Productos</Label>
               <p className="text-xs text-gray-500 mb-2">Los productos se marcarán como [INVENTARIO] en la factura</p>
+              <div className="relative mt-2">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Buscar producto por nombre o SKU..."
+                  value={invoiceProductSearch}
+                  onChange={(e) => setInvoiceProductSearch(e.target.value)}
+                  className="pl-10"
+                  data-testid="invoice-product-search"
+                />
+              </div>
               <div className="mt-2 max-h-60 overflow-y-auto border rounded-lg">
-                {filteredProducts.filter(p => (p.stock || 0) > 0).map(product => {
+                {filteredProducts
+                  .filter(p => (p.stock || 0) > 0)
+                  .filter(p => {
+                    if (!invoiceProductSearch) return true;
+                    const term = invoiceProductSearch.toLowerCase();
+                    return p.name.toLowerCase().includes(term) || 
+                           (p.sku && p.sku.toLowerCase().includes(term));
+                  })
+                  .map(product => {
                   const isSelected = invoiceItems.find(i => i.product_id === product.id);
                   return (
                     <div
@@ -959,6 +979,7 @@ export default function AdminInventory() {
                         <div className="flex-1">
                           <p className="font-medium">{product.name}</p>
                           <p className="text-xs text-gray-500">
+                            {product.sku && <span className="mr-2">SKU: {product.sku}</span>}
                             {formatMoney(product.sale_price)} • Stock: {product.stock}
                           </p>
                         </div>
@@ -978,6 +999,7 @@ export default function AdminInventory() {
                       </div>
                     </div>
                   );
+                })}
                 })}
               </div>
             </div>
