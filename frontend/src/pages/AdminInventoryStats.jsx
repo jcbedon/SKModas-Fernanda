@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/App";
 import { getInventoryStats } from "@/lib/api";
 import { toast } from "sonner";
@@ -15,7 +15,7 @@ import {
   BarChart3,
   PieChart,
   AlertTriangle,
-  Calendar
+  Boxes
 } from "lucide-react";
 import {
   BarChart,
@@ -66,8 +66,28 @@ function getWeekRange(weeksBack = 0) {
 
 const COLORS = ['#1E3A5F', '#2ECC71', '#E74C3C', '#F39C12', '#9B59B6', '#3498DB', '#1ABC9C', '#E67E22'];
 
+const LOCATION_CONFIG = {
+  ecuador: {
+    name: "Ecuador",
+    color: "from-green-50 to-green-100",
+    borderColor: "border-green-200",
+    textColor: "text-green-700",
+    bgColor: "#10B981",
+    icon: "🇪🇨"
+  },
+  usa: {
+    name: "USA",
+    color: "from-blue-50 to-blue-100",
+    borderColor: "border-blue-200",
+    textColor: "text-blue-700",
+    bgColor: "#3B82F6",
+    icon: "🇺🇸"
+  }
+};
+
 export default function AdminInventoryStats() {
   const navigate = useNavigate();
+  const { location } = useParams(); // 'ecuador' or 'usa'
   const { user } = useAuth();
   const logoUrl = user?.tenant_logo || DEFAULT_LOGO;
   
@@ -75,14 +95,20 @@ export default function AdminInventoryStats() {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("week");
 
+  const config = LOCATION_CONFIG[location] || LOCATION_CONFIG.ecuador;
+
   useEffect(() => {
+    if (!location || !["ecuador", "usa"].includes(location)) {
+      navigate("/admin/inventory-stats/ecuador");
+      return;
+    }
     loadStats();
-  }, []);
+  }, [location]);
 
   const loadStats = async (p) => {
     try {
       setLoading(true);
-      const res = await getInventoryStats(p || period);
+      const res = await getInventoryStats(location, p || period);
       setStats(res.data);
     } catch (e) {
       toast.error("Error al cargar estadísticas");
@@ -121,11 +147,11 @@ export default function AdminInventoryStats() {
       {/* Header */}
       <div className="bg-white/90 backdrop-blur-sm border-b border-gray-100 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/admin/inventory")} data-testid="back-btn">
+          <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/inventory/${location}`)} data-testid="back-btn">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <img src={logoUrl} alt="Logo" className="h-10 object-contain" />
-          <span className="font-bold text-slate-800">Estadísticas de Inventario</span>
+          <span className="font-bold text-slate-800">Estadísticas Inventario {config.icon} {config.name}</span>
         </div>
       </div>
 
@@ -136,7 +162,7 @@ export default function AdminInventoryStats() {
             variant={period === "week" ? "default" : "outline"}
             size="sm"
             className="rounded-xl"
-            style={period === "week" ? { background: '#1E3A5F', color: 'white' } : {}}
+            style={period === "week" ? { background: config.bgColor, color: 'white' } : {}}
             onClick={() => handlePeriodChange("week")}
             data-testid="period-week"
           >
@@ -148,7 +174,7 @@ export default function AdminInventoryStats() {
               variant={period === `w${n}` ? "default" : "outline"}
               size="sm"
               className="rounded-xl"
-              style={period === `w${n}` ? { background: '#1E3A5F', color: 'white' } : {}}
+              style={period === `w${n}` ? { background: config.bgColor, color: 'white' } : {}}
               onClick={() => handlePeriodChange(`w${n}`)}
               data-testid={`period-w${n}`}
             >
@@ -159,7 +185,7 @@ export default function AdminInventoryStats() {
             variant={period === "month" ? "default" : "outline"}
             size="sm"
             className="rounded-xl"
-            style={period === "month" ? { background: '#1E3A5F', color: 'white' } : {}}
+            style={period === "month" ? { background: config.bgColor, color: 'white' } : {}}
             onClick={() => handlePeriodChange("month")}
             data-testid="period-month"
           >
@@ -169,7 +195,7 @@ export default function AdminInventoryStats() {
             variant={period === "all" ? "default" : "outline"}
             size="sm"
             className="rounded-xl"
-            style={period === "all" ? { background: '#1E3A5F', color: 'white' } : {}}
+            style={period === "all" ? { background: config.bgColor, color: 'white' } : {}}
             onClick={() => handlePeriodChange("all")}
             data-testid="period-all"
           >
@@ -203,14 +229,14 @@ export default function AdminInventoryStats() {
           <Card className="rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
             <CardContent className="p-4">
               <BarChart3 className="h-5 w-5 text-purple-600 mb-2" />
-              <p className="text-2xl font-extrabold text-purple-700">{summary.margin_percent}%</p>
+              <p className="text-2xl font-extrabold text-purple-700">{summary.margin_percent || 0}%</p>
               <p className="text-xs text-purple-600">Margen</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Secondary Stats */}
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <Card className="rounded-xl">
             <CardContent className="p-3 text-center">
               <p className="text-xl font-bold text-slate-800">{summary.sale_count || 0}</p>
@@ -229,16 +255,10 @@ export default function AdminInventoryStats() {
               <p className="text-xs text-gray-500">Impuestos</p>
             </CardContent>
           </Card>
-          <Card className="rounded-xl">
+          <Card className={`rounded-xl bg-gradient-to-br ${config.color}`}>
             <CardContent className="p-3 text-center">
-              <p className="text-xl font-bold text-green-700">{stock.ecuador || 0}</p>
-              <p className="text-xs text-gray-500">Stock Ecuador</p>
-            </CardContent>
-          </Card>
-          <Card className="rounded-xl">
-            <CardContent className="p-3 text-center">
-              <p className="text-xl font-bold text-purple-700">{stock.usa || 0}</p>
-              <p className="text-xs text-gray-500">Stock USA</p>
+              <p className={`text-xl font-bold ${config.textColor}`}>{stock.total || 0}</p>
+              <p className="text-xs text-gray-500">Stock {config.name}</p>
             </CardContent>
           </Card>
           <Card className="rounded-xl">
@@ -255,8 +275,8 @@ export default function AdminInventoryStats() {
           <Card className="rounded-xl">
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-blue-600" />
-                Tendencia de Ventas
+                <TrendingUp className={`h-5 w-5 ${config.textColor}`} />
+                Tendencia de Ventas {config.name}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -351,7 +371,7 @@ export default function AdminInventoryStats() {
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <ShoppingCart className="h-5 w-5 text-green-600" />
-              Productos Más Vendidos
+              Productos Más Vendidos {config.name}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -420,7 +440,7 @@ export default function AdminInventoryStats() {
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2 text-red-700">
                 <AlertTriangle className="h-5 w-5 text-red-600" />
-                Alertas de Stock Bajo
+                Alertas de Stock Bajo {config.name}
                 <Badge variant="destructive">{lowStockAlerts.length}</Badge>
               </CardTitle>
             </CardHeader>
@@ -433,16 +453,8 @@ export default function AdminInventoryStats() {
                     data-testid={`low-stock-${product.id}`}
                   >
                     <p className="font-medium text-slate-800">{product.name}</p>
-                    <div className="flex gap-4 mt-1 text-sm">
-                      <span className="text-red-700">
-                        Ecuador: <strong>{product.stock_ecuador}</strong>
-                      </span>
-                      <span className="text-red-700">
-                        USA: <strong>{product.stock_usa}</strong>
-                      </span>
-                    </div>
-                    <p className="text-xs text-red-600 mt-1">
-                      Total: {product.total_stock} unidades
+                    <p className="text-sm text-red-700 mt-1">
+                      Stock: <strong>{product.stock}</strong> unidades
                     </p>
                   </div>
                 ))}

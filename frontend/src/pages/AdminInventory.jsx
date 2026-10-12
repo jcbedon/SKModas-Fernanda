@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/App";
 import { 
   getInventoryProducts, 
@@ -17,7 +17,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   ArrowLeft, 
   Package, 
@@ -27,7 +26,6 @@ import {
   Trash2, 
   ShoppingCart,
   DollarSign,
-  TrendingUp,
   AlertTriangle,
   BarChart3,
   Boxes,
@@ -40,8 +38,26 @@ function formatMoney(n) {
   return "$" + (n || 0).toFixed(2);
 }
 
+const LOCATION_CONFIG = {
+  ecuador: {
+    name: "Ecuador",
+    color: "from-green-50 to-green-100",
+    borderColor: "border-green-200",
+    textColor: "text-green-700",
+    icon: "🇪🇨"
+  },
+  usa: {
+    name: "USA",
+    color: "from-blue-50 to-blue-100",
+    borderColor: "border-blue-200",
+    textColor: "text-blue-700",
+    icon: "🇺🇸"
+  }
+};
+
 export default function AdminInventory() {
   const navigate = useNavigate();
+  const { location } = useParams(); // 'ecuador' or 'usa'
   const { user } = useAuth();
   const logoUrl = user?.tenant_logo || DEFAULT_LOGO;
   
@@ -49,7 +65,6 @@ export default function AdminInventory() {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("products");
   
   // Dialogs
   const [productDialog, setProductDialog] = useState(false);
@@ -65,35 +80,38 @@ export default function AdminInventory() {
     cost: "",
     sale_price: "",
     tax_rate: "0",
-    stock_ecuador: "0",
-    stock_usa: "0",
+    stock: "0",
     sku: "",
     description: ""
   });
   
   const [saleForm, setSaleForm] = useState({
     quantity: "1",
-    location: "ecuador",
     customer_id: "",
     notes: ""
   });
   
   const [stockForm, setStockForm] = useState({
     adjustment: "",
-    location: "ecuador",
     reason: ""
   });
 
+  const config = LOCATION_CONFIG[location] || LOCATION_CONFIG.ecuador;
+
   useEffect(() => {
+    if (!location || !["ecuador", "usa"].includes(location)) {
+      navigate("/admin/inventory/ecuador");
+      return;
+    }
     loadData();
-  }, []);
+  }, [location]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [productsRes, salesRes] = await Promise.all([
-        getInventoryProducts(),
-        getInventorySales()
+        getInventoryProducts(location),
+        getInventorySales(location)
       ]);
       setProducts(productsRes.data || []);
       setSales(salesRes.data || []);
@@ -111,8 +129,7 @@ export default function AdminInventory() {
       cost: "",
       sale_price: "",
       tax_rate: "0",
-      stock_ecuador: "0",
-      stock_usa: "0",
+      stock: "0",
       sku: "",
       description: ""
     });
@@ -125,9 +142,8 @@ export default function AdminInventory() {
       name: product.name,
       cost: product.cost.toString(),
       sale_price: product.sale_price.toString(),
-      tax_rate: (product.tax_rate * 100).toString(),
-      stock_ecuador: product.stock_ecuador.toString(),
-      stock_usa: product.stock_usa.toString(),
+      tax_rate: ((product.tax_rate || 0) * 100).toString(),
+      stock: (product.stock || 0).toString(),
       sku: product.sku || "",
       description: product.description || ""
     });
@@ -141,19 +157,21 @@ export default function AdminInventory() {
     }
 
     const data = {
+      location: location,
       name: productForm.name,
       cost: parseFloat(productForm.cost),
       sale_price: parseFloat(productForm.sale_price),
       tax_rate: parseFloat(productForm.tax_rate || 0) / 100,
-      stock_ecuador: parseInt(productForm.stock_ecuador || 0),
-      stock_usa: parseInt(productForm.stock_usa || 0),
+      stock: parseInt(productForm.stock || 0),
       sku: productForm.sku || null,
       description: productForm.description || null
     };
 
     try {
       if (editingProduct) {
-        await updateInventoryProduct(editingProduct.id, data);
+        // Don't send location on update
+        const { location: _, ...updateData } = data;
+        await updateInventoryProduct(editingProduct.id, updateData);
         toast.success("Producto actualizado");
       } else {
         await createInventoryProduct(data);
@@ -181,7 +199,6 @@ export default function AdminInventory() {
     setSelectedProduct(product);
     setSaleForm({
       quantity: "1",
-      location: "ecuador",
       customer_id: "",
       notes: ""
     });
@@ -201,7 +218,6 @@ export default function AdminInventory() {
       await createInventorySale({
         product_id: selectedProduct.id,
         quantity: qty,
-        location: saleForm.location,
         customer_id: saleForm.customer_id || null,
         notes: saleForm.notes || null
       });
@@ -217,7 +233,6 @@ export default function AdminInventory() {
     setStockProduct(product);
     setStockForm({
       adjustment: "",
-      location: "ecuador",
       reason: ""
     });
     setStockDialog(true);
@@ -233,7 +248,6 @@ export default function AdminInventory() {
       await adjustInventoryStock(
         stockProduct.id,
         parseInt(stockForm.adjustment),
-        stockForm.location,
         stockForm.reason || null
       );
       toast.success("Stock ajustado");
@@ -256,10 +270,9 @@ export default function AdminInventory() {
 
   // Calculate summary stats
   const totalProducts = filteredProducts.length;
-  const totalStockEcuador = filteredProducts.reduce((s, p) => s + (p.stock_ecuador || 0), 0);
-  const totalStockUSA = filteredProducts.reduce((s, p) => s + (p.stock_usa || 0), 0);
-  const totalStockValue = filteredProducts.reduce((s, p) => s + p.cost * ((p.stock_ecuador || 0) + (p.stock_usa || 0)), 0);
-  const lowStockCount = filteredProducts.filter(p => (p.stock_ecuador || 0) + (p.stock_usa || 0) < 5).length;
+  const totalStock = filteredProducts.reduce((s, p) => s + (p.stock || 0), 0);
+  const totalStockValue = filteredProducts.reduce((s, p) => s + p.cost * (p.stock || 0), 0);
+  const lowStockCount = filteredProducts.filter(p => (p.stock || 0) < 5).length;
 
   if (loading) {
     return (
@@ -278,10 +291,10 @@ export default function AdminInventory() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <img src={logoUrl} alt="Logo" className="h-10 object-contain" />
-          <span className="font-bold text-slate-800">Inventario</span>
+          <span className="font-bold text-slate-800">Inventario {config.icon} {config.name}</span>
           <div className="ml-auto flex gap-2">
             <Button
-              onClick={() => navigate("/admin/inventory-stats")}
+              onClick={() => navigate(`/admin/inventory-stats/${location}`)}
               variant="outline"
               size="sm"
               className="gap-2"
@@ -305,26 +318,19 @@ export default function AdminInventory() {
 
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <Card className="rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className={`rounded-xl bg-gradient-to-br ${config.color} ${config.borderColor}`}>
             <CardContent className="p-4">
-              <Package className="h-5 w-5 text-blue-600 mb-2" />
-              <p className="text-2xl font-extrabold text-blue-700">{totalProducts}</p>
-              <p className="text-xs text-blue-600">Productos</p>
+              <Package className={`h-5 w-5 ${config.textColor} mb-2`} />
+              <p className={`text-2xl font-extrabold ${config.textColor}`}>{totalProducts}</p>
+              <p className={`text-xs ${config.textColor}`}>Productos</p>
             </CardContent>
           </Card>
-          <Card className="rounded-xl bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+          <Card className={`rounded-xl bg-gradient-to-br ${config.color} ${config.borderColor}`}>
             <CardContent className="p-4">
-              <MapPin className="h-5 w-5 text-green-600 mb-2" />
-              <p className="text-2xl font-extrabold text-green-700">{totalStockEcuador}</p>
-              <p className="text-xs text-green-600">Stock Ecuador</p>
-            </CardContent>
-          </Card>
-          <Card className="rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-            <CardContent className="p-4">
-              <MapPin className="h-5 w-5 text-purple-600 mb-2" />
-              <p className="text-2xl font-extrabold text-purple-700">{totalStockUSA}</p>
-              <p className="text-xs text-purple-600">Stock USA</p>
+              <Boxes className={`h-5 w-5 ${config.textColor} mb-2`} />
+              <p className={`text-2xl font-extrabold ${config.textColor}`}>{totalStock}</p>
+              <p className={`text-xs ${config.textColor}`}>Stock Total</p>
             </CardContent>
           </Card>
           <Card className="rounded-xl bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200">
@@ -359,15 +365,15 @@ export default function AdminInventory() {
         <Card className="rounded-xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
-              <Boxes className="h-5 w-5 text-blue-600" />
-              Productos ({filteredProducts.length})
+              <Boxes className={`h-5 w-5 ${config.textColor}`} />
+              Productos {config.name} ({filteredProducts.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
             {filteredProducts.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>No hay productos en el inventario</p>
+                <p>No hay productos en el inventario de {config.name}</p>
                 <Button onClick={openNewProduct} className="mt-4" variant="outline">
                   Crear primer producto
                 </Button>
@@ -381,18 +387,17 @@ export default function AdminInventory() {
                       <th className="text-right p-2 font-medium">Costo</th>
                       <th className="text-right p-2 font-medium">Precio Venta</th>
                       <th className="text-right p-2 font-medium">Impuesto</th>
-                      <th className="text-center p-2 font-medium">Ecuador</th>
-                      <th className="text-center p-2 font-medium">USA</th>
+                      <th className="text-center p-2 font-medium">Stock</th>
                       <th className="text-right p-2 font-medium">Margen</th>
                       <th className="text-center p-2 font-medium">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredProducts.map((product) => {
-                      const totalStock = (product.stock_ecuador || 0) + (product.stock_usa || 0);
+                      const stock = product.stock || 0;
                       const margin = product.sale_price - product.cost;
                       const marginPercent = product.cost > 0 ? ((margin / product.cost) * 100).toFixed(0) : 0;
-                      const isLowStock = totalStock < 5;
+                      const isLowStock = stock < 5;
                       
                       return (
                         <tr 
@@ -415,18 +420,10 @@ export default function AdminInventory() {
                           </td>
                           <td className="p-2 text-center">
                             <Badge 
-                              variant={product.stock_ecuador < 5 ? "destructive" : "outline"}
+                              variant={isLowStock ? "destructive" : "outline"}
                               className="font-mono"
                             >
-                              {product.stock_ecuador || 0}
-                            </Badge>
-                          </td>
-                          <td className="p-2 text-center">
-                            <Badge 
-                              variant={product.stock_usa < 5 ? "destructive" : "secondary"}
-                              className="font-mono"
-                            >
-                              {product.stock_usa || 0}
+                              {stock}
                             </Badge>
                           </td>
                           <td className="p-2 text-right">
@@ -489,7 +486,7 @@ export default function AdminInventory() {
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2">
                 <ShoppingCart className="h-5 w-5 text-green-600" />
-                Ventas Recientes
+                Ventas Recientes {config.name}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -503,7 +500,7 @@ export default function AdminInventory() {
                     <div>
                       <p className="font-medium text-slate-800">{sale.product_name}</p>
                       <p className="text-xs text-gray-500">
-                        {sale.quantity}x @ {formatMoney(sale.unit_price)} • {sale.location.toUpperCase()}
+                        {sale.quantity}x @ {formatMoney(sale.unit_price)}
                         {sale.customer_name && ` • ${sale.customer_name}`}
                       </p>
                     </div>
@@ -524,7 +521,7 @@ export default function AdminInventory() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editingProduct ? "Editar Producto" : "Nuevo Producto"}
+              {editingProduct ? "Editar Producto" : `Nuevo Producto ${config.name}`}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -561,36 +558,26 @@ export default function AdminInventory() {
                 />
               </div>
             </div>
-            <div>
-              <Label>Impuesto (%)</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={productForm.tax_rate}
-                onChange={(e) => setProductForm({...productForm, tax_rate: e.target.value})}
-                placeholder="8.25"
-                data-testid="product-tax-input"
-              />
-            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Stock Ecuador</Label>
+                <Label>Impuesto (%)</Label>
                 <Input
                   type="number"
-                  value={productForm.stock_ecuador}
-                  onChange={(e) => setProductForm({...productForm, stock_ecuador: e.target.value})}
-                  placeholder="0"
-                  data-testid="product-stock-ecuador-input"
+                  step="0.01"
+                  value={productForm.tax_rate}
+                  onChange={(e) => setProductForm({...productForm, tax_rate: e.target.value})}
+                  placeholder="8.25"
+                  data-testid="product-tax-input"
                 />
               </div>
               <div>
-                <Label>Stock USA</Label>
+                <Label>Stock Inicial</Label>
                 <Input
                   type="number"
-                  value={productForm.stock_usa}
-                  onChange={(e) => setProductForm({...productForm, stock_usa: e.target.value})}
+                  value={productForm.stock}
+                  onChange={(e) => setProductForm({...productForm, stock: e.target.value})}
                   placeholder="0"
-                  data-testid="product-stock-usa-input"
+                  data-testid="product-stock-input"
                 />
               </div>
             </div>
@@ -628,20 +615,19 @@ export default function AdminInventory() {
       <Dialog open={saleDialog} onOpenChange={setSaleDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Registrar Venta</DialogTitle>
+            <DialogTitle>Registrar Venta {config.name}</DialogTitle>
           </DialogHeader>
           {selectedProduct && (
             <div className="space-y-4 py-4">
-              <div className="bg-blue-50 p-3 rounded-lg">
+              <div className={`bg-gradient-to-br ${config.color} p-3 rounded-lg`}>
                 <p className="font-bold text-slate-800">{selectedProduct.name}</p>
                 <p className="text-sm text-gray-600">
                   Precio: {formatMoney(selectedProduct.sale_price)}
                   {selectedProduct.tax_rate > 0 && ` + ${(selectedProduct.tax_rate * 100).toFixed(1)}% imp.`}
                 </p>
-                <div className="flex gap-4 mt-2 text-xs">
-                  <span>Ecuador: <strong>{selectedProduct.stock_ecuador}</strong></span>
-                  <span>USA: <strong>{selectedProduct.stock_usa}</strong></span>
-                </div>
+                <p className="text-xs mt-1">
+                  Stock disponible: <strong>{selectedProduct.stock || 0}</strong>
+                </p>
               </div>
               <div>
                 <Label>Cantidad</Label>
@@ -652,18 +638,6 @@ export default function AdminInventory() {
                   onChange={(e) => setSaleForm({...saleForm, quantity: e.target.value})}
                   data-testid="sale-quantity-input"
                 />
-              </div>
-              <div>
-                <Label>Ubicación</Label>
-                <select
-                  value={saleForm.location}
-                  onChange={(e) => setSaleForm({...saleForm, location: e.target.value})}
-                  className="w-full border rounded-md px-3 py-2 bg-white"
-                  data-testid="sale-location-select"
-                >
-                  <option value="ecuador">Ecuador</option>
-                  <option value="usa">USA</option>
-                </select>
               </div>
               <div>
                 <Label>Código Cliente (opcional)</Label>
@@ -730,12 +704,11 @@ export default function AdminInventory() {
           </DialogHeader>
           {stockProduct && (
             <div className="space-y-4 py-4">
-              <div className="bg-blue-50 p-3 rounded-lg">
+              <div className={`bg-gradient-to-br ${config.color} p-3 rounded-lg`}>
                 <p className="font-bold text-slate-800">{stockProduct.name}</p>
-                <div className="flex gap-4 mt-2 text-sm">
-                  <span>Ecuador: <strong>{stockProduct.stock_ecuador}</strong></span>
-                  <span>USA: <strong>{stockProduct.stock_usa}</strong></span>
-                </div>
+                <p className="text-sm mt-1">
+                  Stock actual: <strong>{stockProduct.stock || 0}</strong>
+                </p>
               </div>
               <div>
                 <Label>Ajuste (+/-)</Label>
@@ -749,18 +722,6 @@ export default function AdminInventory() {
                 <p className="text-xs text-gray-500 mt-1">
                   Positivo para agregar, negativo para restar
                 </p>
-              </div>
-              <div>
-                <Label>Ubicación</Label>
-                <select
-                  value={stockForm.location}
-                  onChange={(e) => setStockForm({...stockForm, location: e.target.value})}
-                  className="w-full border rounded-md px-3 py-2 bg-white"
-                  data-testid="stock-location-select"
-                >
-                  <option value="ecuador">Ecuador</option>
-                  <option value="usa">USA</option>
-                </select>
               </div>
               <div>
                 <Label>Razón (opcional)</Label>

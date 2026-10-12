@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form as FastAPIForm, Response, Body
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form as FastAPIForm, Response, Body, Query
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -552,16 +552,16 @@ class AuditLog(BaseModel):
 # ==================== INVENTORY MODELS ====================
 
 class InventoryProduct(BaseModel):
-    """Inventory product for tracking stock and sales"""
+    """Inventory product for tracking stock and sales - belongs to ONE location"""
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tenant_id: str
+    location: str  # "ecuador" or "usa" - each product belongs to ONE location
     name: str
     cost: float  # Cost price (what the business paid)
     sale_price: float  # Sale price to customers
     tax_rate: float = 0.0  # Tax rate (e.g., 0.0825 for 8.25%)
-    stock_ecuador: int = 0  # Stock available in Ecuador
-    stock_usa: int = 0  # Stock available in USA
+    stock: int = 0  # Stock available in this location
     sku: Optional[str] = None  # Optional SKU/barcode
     description: Optional[str] = None
     image_url: Optional[str] = None
@@ -595,12 +595,12 @@ class InventorySale(BaseModel):
 
 
 class InventoryProductCreate(BaseModel):
+    location: str  # "ecuador" or "usa"
     name: str
     cost: float
     sale_price: float
     tax_rate: float = 0.0
-    stock_ecuador: int = 0
-    stock_usa: int = 0
+    stock: int = 0
     sku: Optional[str] = None
     description: Optional[str] = None
 
@@ -610,8 +610,7 @@ class InventoryProductUpdate(BaseModel):
     cost: Optional[float] = None
     sale_price: Optional[float] = None
     tax_rate: Optional[float] = None
-    stock_ecuador: Optional[int] = None
-    stock_usa: Optional[int] = None
+    stock: Optional[int] = None
     sku: Optional[str] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
@@ -621,7 +620,6 @@ class InventorySaleCreate(BaseModel):
     product_id: str
     customer_id: Optional[str] = None
     quantity: int = 1
-    location: str = "ecuador"  # "ecuador" or "usa"
     notes: Optional[str] = None
 
 
@@ -10420,12 +10418,19 @@ async def diagnose_invoice(invoice_id: str, current_user: dict = Depends(get_cur
 # ==================== INVENTORY ENDPOINTS ====================
 
 @api_router.get("/inventory/products")
-async def get_inventory_products(user=Depends(get_current_user)):
-    """Get all inventory products for the tenant"""
+async def get_inventory_products(
+    location: str = Query(..., description="Location: 'ecuador' or 'usa'"),
+    user=Depends(get_current_user)
+):
+    """Get all inventory products for the tenant filtered by location"""
+    if location not in ("ecuador", "usa"):
+        raise HTTPException(status_code=400, detail="Location must be 'ecuador' or 'usa'")
+    
     products = await db.inventory_products.find(
-        {"tenant_id": user["tenant_id"]},
+        {"tenant_id": user["tenant_id"], "location": location},
         {"_id": 0}
     ).sort("name", 1).to_list(1000)
+    return products
     return products
 
 
@@ -10443,15 +10448,18 @@ async def get_inventory_product(product_id: str, user=Depends(get_current_user))
 
 @api_router.post("/inventory/products")
 async def create_inventory_product(data: InventoryProductCreate, user=Depends(get_current_user)):
-    """Create a new inventory product"""
+    """Create a new inventory product for a specific location"""
+    if data.location not in ("ecuador", "usa"):
+        raise HTTPException(status_code=400, detail="Location must be 'ecuador' or 'usa'")
+    
     product = InventoryProduct(
         tenant_id=user["tenant_id"],
+        location=data.location,
         name=data.name,
         cost=data.cost,
         sale_price=data.sale_price,
         tax_rate=data.tax_rate,
-        stock_ecuador=data.stock_ecuador,
-        stock_usa=data.stock_usa,
+        stock=data.stock,
         sku=data.sku,
         description=data.description
     )
@@ -10502,13 +10510,15 @@ async def create_inventory_sale(data: InventorySaleCreate, user=Depends(get_curr
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     
+    # Product location determines sale location
+    location = product.get("location", "ecuador")
+    
     # Check stock availability
-    stock_field = f"stock_{data.location}"
-    current_stock = product.get(stock_field, 0)
+    current_stock = product.get("stock", 0)
     if current_stock < data.quantity:
         raise HTTPException(
             status_code=400, 
-            detail=f"Stock insuficiente en {data.location}. Disponible: {current_stock}"
+            detail=f"Stock insuficiente. Disponible: {current_stock}"
         )
     
     # Get customer info if provided
@@ -10541,7 +10551,7 @@ async def create_inventory_sale(data: InventorySaleCreate, user=Depends(get_curr
         tax_amount=tax_amount,
         total_amount=total_amount,
         profit=profit,
-        location=data.location,
+        location=location,
         notes=data.notes,
         sold_by=user.get("user_id"),
         sold_by_name=user.get("name")
@@ -10553,7 +10563,7 @@ async def create_inventory_sale(data: InventorySaleCreate, user=Depends(get_curr
     await db.inventory_products.update_one(
         {"id": data.product_id},
         {
-            "$inc": {stock_field: -data.quantity},
+            "$inc": {"stock": -data.quantity},
             "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
         }
     )
@@ -10563,13 +10573,17 @@ async def create_inventory_sale(data: InventorySaleCreate, user=Depends(get_curr
 
 @api_router.get("/inventory/sales")
 async def get_inventory_sales(
+    location: str = Query(..., description="Location: 'ecuador' or 'usa'"),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     product_id: Optional[str] = None,
     user=Depends(get_current_user)
 ):
     """Get inventory sales with optional filters"""
-    query = {"tenant_id": user["tenant_id"]}
+    if location not in ("ecuador", "usa"):
+        raise HTTPException(status_code=400, detail="Location must be 'ecuador' or 'usa'")
+    
+    query = {"tenant_id": user["tenant_id"], "location": location}
     
     if product_id:
         query["product_id"] = product_id
@@ -10595,11 +10609,10 @@ async def delete_inventory_sale(sale_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Venta no encontrada")
     
     # Restore stock
-    stock_field = f"stock_{sale['location']}"
     await db.inventory_products.update_one(
         {"id": sale["product_id"]},
         {
-            "$inc": {stock_field: sale["quantity"]},
+            "$inc": {"stock": sale["quantity"]},
             "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
         }
     )
@@ -10612,10 +10625,14 @@ async def delete_inventory_sale(sale_id: str, user=Depends(get_current_user)):
 
 @api_router.get("/inventory/stats")
 async def get_inventory_stats(
+    location: str = Query(..., description="Location: 'ecuador' or 'usa'"),
     period: str = "week",
     user=Depends(get_current_user)
 ):
     """Get inventory statistics - weekly by default like other modules"""
+    if location not in ("ecuador", "usa"):
+        raise HTTPException(status_code=400, detail="Location must be 'ecuador' or 'usa'")
+    
     tenant_id = user["tenant_id"]
     
     # Calculate date range based on period
@@ -10651,8 +10668,8 @@ async def get_inventory_stats(
             start_date = None
             end_date = None
     
-    # Build query
-    query = {"tenant_id": tenant_id}
+    # Build query - filter by location
+    query = {"tenant_id": tenant_id, "location": location}
     if start_date:
         query["created_at"] = {"$gte": start_date}
         if end_date:
@@ -10709,16 +10726,15 @@ async def get_inventory_stats(
     
     daily_trend = sorted(daily_sales.values(), key=lambda x: x["date"])
     
-    # Get current stock levels
+    # Get current stock levels - filter by location
     products = await db.inventory_products.find(
-        {"tenant_id": tenant_id, "is_active": True},
+        {"tenant_id": tenant_id, "location": location, "is_active": True},
         {"_id": 0}
     ).to_list(1000)
     
-    total_stock_ecuador = sum(p.get("stock_ecuador", 0) for p in products)
-    total_stock_usa = sum(p.get("stock_usa", 0) for p in products)
+    total_stock = sum(p.get("stock", 0) for p in products)
     total_stock_value = sum(
-        p.get("cost", 0) * (p.get("stock_ecuador", 0) + p.get("stock_usa", 0))
+        p.get("cost", 0) * p.get("stock", 0)
         for p in products
     )
     
@@ -10727,16 +10743,15 @@ async def get_inventory_stats(
         {
             "id": p["id"],
             "name": p["name"],
-            "stock_ecuador": p.get("stock_ecuador", 0),
-            "stock_usa": p.get("stock_usa", 0),
-            "total_stock": p.get("stock_ecuador", 0) + p.get("stock_usa", 0)
+            "stock": p.get("stock", 0)
         }
         for p in products
-        if (p.get("stock_ecuador", 0) + p.get("stock_usa", 0)) < 5
+        if p.get("stock", 0) < 5
     ]
     
     return {
         "period": period,
+        "location": location,
         "start_date": start_date,
         "end_date": end_date,
         "summary": {
@@ -10749,8 +10764,7 @@ async def get_inventory_stats(
             "margin_percent": round((total_profit / total_sales * 100) if total_sales > 0 else 0, 1)
         },
         "stock": {
-            "ecuador": total_stock_ecuador,
-            "usa": total_stock_usa,
+            "total": total_stock,
             "total_value": round(total_stock_value, 2),
             "product_count": len(products)
         },
@@ -10764,7 +10778,6 @@ async def get_inventory_stats(
 async def adjust_inventory_stock(
     product_id: str,
     adjustment: int = Body(..., embed=True),
-    location: str = Body(..., embed=True),
     reason: str = Body(None, embed=True),
     user=Depends(get_current_user)
 ):
@@ -10775,8 +10788,7 @@ async def adjust_inventory_stock(
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     
-    stock_field = f"stock_{location}"
-    current_stock = product.get(stock_field, 0)
+    current_stock = product.get("stock", 0)
     new_stock = current_stock + adjustment
     
     if new_stock < 0:
@@ -10786,7 +10798,7 @@ async def adjust_inventory_stock(
         {"id": product_id},
         {
             "$set": {
-                stock_field: new_stock,
+                "stock": new_stock,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }
         }
@@ -10804,7 +10816,7 @@ async def adjust_inventory_stock(
         "entity_id": product_id,
         "entity_name": product["name"],
         "details": {
-            "location": location,
+            "location": product.get("location"),
             "previous_stock": current_stock,
             "adjustment": adjustment,
             "new_stock": new_stock,
