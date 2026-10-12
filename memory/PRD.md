@@ -293,3 +293,78 @@ Frontend:
 
 Testing: iteration_15.json → 8/8 backend PASS, todos los flujos frontend PASS, sin issues. Nota: wallets no existían en el tenant demo (seed incompleto); se crearon para D1001/D1002/D1003. NOTA DEPLOY: requiere Deploy para producción; activar el módulo por tenant desde Superadmin → Configuración.
 Pendiente menor (no bloqueante): el endpoint bulk no usa transacción DB (degrada por-cliente con failed[]); refactor de server.py (ya >10k líneas) sigue pendiente.
+
+---
+
+## Módulo de Inventario [12-Oct-2026]
+
+### Descripción
+Nuevo módulo completo para gestión de productos de inventario propios del negocio, con seguimiento de costos, stock por ubicación (Ecuador/USA) y estadísticas de ganancias netas.
+
+### Campos de Producto
+- `name` (requerido) - Nombre del producto
+- `cost` (requerido) - Precio de costo/compra
+- `sale_price` (requerido) - Precio de venta al cliente
+- `tax_rate` - Impuesto (ej: 0.0825 para 8.25%)
+- `stock_ecuador` - Cantidad disponible en Ecuador
+- `stock_usa` - Cantidad disponible en USA
+- `sku` - Código SKU/barcode opcional
+- `description` - Descripción opcional
+
+### Funcionalidades
+1. **Gestión de Productos** (/admin/inventory)
+   - Crear/Editar/Eliminar productos
+   - KPIs: total productos, stock Ecuador, stock USA, valor total en stock, alertas de stock bajo (<5 unidades)
+   - Tabla con: producto, costo, precio venta, impuesto, stock por ubicación, margen ($ y %)
+   - Acciones: registrar venta, ajustar stock, editar, eliminar
+
+2. **Ventas de Inventario**
+   - Registrar venta seleccionando producto, cantidad, ubicación (Ecuador/USA)
+   - Opcional: asignar a cliente por customer_id
+   - Descuenta automáticamente del stock de la ubicación seleccionada
+   - Calcula: subtotal, impuesto, total, ganancia
+   - Validación de stock insuficiente
+
+3. **Ajustes de Stock**
+   - Ajuste manual positivo (agregar) o negativo (restar)
+   - Seleccionar ubicación (Ecuador/USA)
+   - Razón del ajuste opcional (se guarda en audit_logs)
+
+4. **Estadísticas** (/admin/inventory-stats)
+   - **KPIs principales**: Ventas totales, Costo total, Ganancia neta, Margen %
+   - **KPIs secundarios**: Transacciones, Unidades vendidas, Impuestos, Stock Ecuador, Stock USA, Valor stock
+   - **Filtros de período** (semanal como otros módulos): Esta semana, semanas anteriores, Este mes, Todo
+   - **Gráfico de tendencia**: Línea de ventas y ganancia por día
+   - **Distribución de ventas**: Pie chart por producto
+   - **Productos Más Vendidos**: Tabla con ranking, cantidad, ventas, costo, ganancia, margen
+   - **Alertas de Stock Bajo**: Lista de productos con menos de 5 unidades
+
+### Backend (server.py)
+- Modelos: `InventoryProduct`, `InventorySale`, `InventoryProductCreate`, `InventoryProductUpdate`, `InventorySaleCreate`
+- Endpoints:
+  - `GET /api/inventory/products` - Lista productos del tenant
+  - `GET /api/inventory/products/{id}` - Detalle de producto
+  - `POST /api/inventory/products` - Crear producto
+  - `PUT /api/inventory/products/{id}` - Actualizar producto
+  - `DELETE /api/inventory/products/{id}` - Soft delete (is_active=false)
+  - `POST /api/inventory/sales` - Registrar venta (descuenta stock)
+  - `GET /api/inventory/sales` - Lista ventas con filtros opcionales
+  - `DELETE /api/inventory/sales/{id}` - Eliminar venta (restaura stock)
+  - `GET /api/inventory/stats?period=` - Estadísticas (week/w1/w2/month/all)
+  - `POST /api/inventory/products/{id}/adjust-stock` - Ajustar stock con audit log
+
+### Frontend
+- `AdminInventory.jsx` - Página principal de gestión de productos
+- `AdminInventoryStats.jsx` - Página de estadísticas de inventario
+- `AdminDashboard.jsx` - Botón "Inventario" agregado al menú de Acciones Rápidas
+- `api.js` - Funciones de API para inventario
+- `App.js` - Rutas protegidas /admin/inventory y /admin/inventory-stats
+
+### Testing
+- iteration_17.json: 14/14 backend tests PASS, 100% frontend flows PASS
+- Producto de prueba: "Camiseta Deportiva" SKU CAM-001, $15 costo, $29.99 venta, 8.25% tax, 48 Ecuador, 25 USA
+
+### Pendiente/Backlog
+- Hacer el umbral de stock bajo (<5) configurable por tenant
+- Permiso específico `manage_inventory` para empleados (actualmente hereda de admin)
+
