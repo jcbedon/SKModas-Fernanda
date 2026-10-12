@@ -73,7 +73,7 @@ const LOCATION_CONFIG = {
     borderColor: "border-green-200",
     textColor: "text-green-700",
     bgColor: "#10B981",
-    icon: "🇪🇨"
+    flag: "https://flagcdn.com/w40/ec.png"
   },
   usa: {
     name: "USA",
@@ -81,7 +81,7 @@ const LOCATION_CONFIG = {
     borderColor: "border-blue-200",
     textColor: "text-blue-700",
     bgColor: "#3B82F6",
-    icon: "🇺🇸"
+    flag: "https://flagcdn.com/w40/us.png"
   }
 };
 
@@ -151,7 +151,9 @@ export default function AdminInventoryStats() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <img src={logoUrl} alt="Logo" className="h-10 object-contain" />
-          <span className="font-bold text-slate-800">Estadísticas Inventario {config.icon} {config.name}</span>
+          <span className="font-bold text-slate-800 flex items-center gap-2">
+            Estadísticas Inventario <img src={config.flag} alt={config.name} className="h-5" /> {config.name}
+          </span>
         </div>
       </div>
 

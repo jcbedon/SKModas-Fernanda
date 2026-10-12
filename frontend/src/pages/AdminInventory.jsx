@@ -54,9 +54,9 @@ const LOCATION_CONFIG = {
     borderColor: "border-green-200",
     textColor: "text-green-700",
     bgColor: "bg-green-600",
-    icon: "🇪🇨",
+    flag: "https://flagcdn.com/w40/ec.png",
     otherLocation: "usa",
-    otherIcon: "🇺🇸",
+    otherFlag: "https://flagcdn.com/w40/us.png",
     otherName: "USA"
   },
   usa: {
@@ -65,9 +65,9 @@ const LOCATION_CONFIG = {
     borderColor: "border-blue-200",
     textColor: "text-blue-700",
     bgColor: "bg-blue-600",
-    icon: "🇺🇸",
+    flag: "https://flagcdn.com/w40/us.png",
     otherLocation: "ecuador",
-    otherIcon: "🇪🇨",
+    otherFlag: "https://flagcdn.com/w40/ec.png",
     otherName: "Ecuador"
   }
 };
@@ -462,7 +462,9 @@ export default function AdminInventory() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <img src={logoUrl} alt="Logo" className="h-10 object-contain" />
-          <span className="font-bold text-slate-800">Inventario {config.icon} {config.name}</span>
+          <span className="font-bold text-slate-800 flex items-center gap-2">
+            Inventario <img src={config.flag} alt={config.name} className="h-5 inline-block" /> {config.name}
+          </span>
           
           {/* Low stock alert badge */}
           {lowStockAlerts.length > 0 && (
@@ -836,7 +838,9 @@ export default function AdminInventory() {
       <Dialog open={transferDialog} onOpenChange={setTransferDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Transferir a {config.otherIcon} {config.otherName}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              Transferir a <img src={config.otherFlag} alt={config.otherName} className="h-5 inline-block" /> {config.otherName}
+            </DialogTitle>
           </DialogHeader>
           {transferProduct && (
             <div className="space-y-4 py-4">
@@ -874,8 +878,8 @@ export default function AdminInventory() {
               )}
               <div className="bg-purple-50 p-3 rounded-lg text-center">
                 <ArrowRightLeft className="h-6 w-6 mx-auto text-purple-600 mb-2" />
-                <p className="text-sm text-purple-700">
-                  {transferForm.quantity || 0} unidades de {config.icon} {config.name} → {config.otherIcon} {config.otherName}
+                <p className="text-sm text-purple-700 flex items-center justify-center gap-2">
+                  {transferForm.quantity || 0} unidades de <img src={config.flag} alt={config.name} className="h-4 inline-block" /> {config.name} → <img src={config.otherFlag} alt={config.otherName} className="h-4 inline-block" /> {config.otherName}
                 </p>
               </div>
             </div>
@@ -893,7 +897,7 @@ export default function AdminInventory() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-green-600" />
-              Facturar Productos de Inventario {config.icon}
+              Facturar Productos de Inventario <img src={config.flag} alt={config.name} className="h-5 inline-block" />
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">

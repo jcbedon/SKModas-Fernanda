@@ -39,8 +39,12 @@ export default function AdminInventorySelect() {
             data-testid="inventory-ecuador-card"
           >
             <CardContent className="p-0">
-              <div className="bg-gradient-to-br from-green-500 to-green-600 p-6 text-center">
-                <span className="text-6xl">🇪🇨</span>
+              <div className="bg-gradient-to-br from-green-500 to-green-600 p-6 flex justify-center items-center">
+                <img 
+                  src="https://flagcdn.com/w160/ec.png" 
+                  alt="Ecuador" 
+                  className="h-20 rounded shadow-lg"
+                />
               </div>
               <div className="p-6 text-center bg-white">
                 <h2 className="text-xl font-bold text-slate-800 mb-1">Ecuador</h2>
@@ -56,8 +60,12 @@ export default function AdminInventorySelect() {
             data-testid="inventory-usa-card"
           >
             <CardContent className="p-0">
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 text-center">
-                <span className="text-6xl">🇺🇸</span>
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 flex justify-center items-center">
+                <img 
+                  src="https://flagcdn.com/w160/us.png" 
+                  alt="USA" 
+                  className="h-20 rounded shadow-lg"
+                />
               </div>
               <div className="p-6 text-center bg-white">
                 <h2 className="text-xl font-bold text-slate-800 mb-1">USA</h2>
