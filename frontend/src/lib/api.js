@@ -261,9 +261,17 @@ export const updateInventoryProduct = (productId, data) => api.put(`/inventory/p
 export const deleteInventoryProduct = (productId) => api.delete(`/inventory/products/${productId}`);
 export const adjustInventoryStock = (productId, adjustment, reason) => 
   api.post(`/inventory/products/${productId}/adjust-stock`, { adjustment, reason });
+export const transferInventoryStock = (productId, quantity, targetProductId, createNew) =>
+  api.post(`/inventory/products/${productId}/transfer`, { quantity, target_product_id: targetProductId, create_new: createNew });
+export const getProductsForTransfer = (targetLocation) => 
+  api.get("/inventory/products-for-transfer", { params: { target_location: targetLocation } });
 export const getInventorySales = (location, params = {}) => api.get("/inventory/sales", { params: { location, ...params } });
 export const createInventorySale = (data) => api.post("/inventory/sales", data);
 export const deleteInventorySale = (saleId) => api.delete(`/inventory/sales/${saleId}`);
 export const getInventoryStats = (location, period = "week") => api.get("/inventory/stats", { params: { location, period } });
+export const createPurchasesFromInventory = (items, customerId) => 
+  api.post("/inventory/create-purchases", { items, customer_id: customerId });
+export const getLowStockAlerts = (threshold = 5, location = null) => 
+  api.get("/inventory/low-stock-alerts", { params: { threshold, location } });
 
 export default api;

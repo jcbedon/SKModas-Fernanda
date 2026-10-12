@@ -7,8 +7,13 @@ import {
   updateInventoryProduct, 
   deleteInventoryProduct,
   adjustInventoryStock,
+  transferInventoryStock,
+  getProductsForTransfer,
   createInventorySale,
-  getInventorySales
+  getInventorySales,
+  createPurchasesFromInventory,
+  getLowStockAlerts,
+  getAllClients
 } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -17,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   ArrowLeft, 
   Package, 
@@ -29,7 +35,10 @@ import {
   AlertTriangle,
   BarChart3,
   Boxes,
-  MapPin
+  ArrowRightLeft,
+  FileText,
+  Bell,
+  Check
 } from "lucide-react";
 
 const DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_compraenvivo/artifacts/qvyfsb43_WhatsApp%20Image%202026-02-03%20at%208.05.08%20PM.jpeg";
@@ -44,20 +53,28 @@ const LOCATION_CONFIG = {
     color: "from-green-50 to-green-100",
     borderColor: "border-green-200",
     textColor: "text-green-700",
-    icon: "🇪🇨"
+    bgColor: "bg-green-600",
+    icon: "🇪🇨",
+    otherLocation: "usa",
+    otherIcon: "🇺🇸",
+    otherName: "USA"
   },
   usa: {
     name: "USA",
     color: "from-blue-50 to-blue-100",
     borderColor: "border-blue-200",
     textColor: "text-blue-700",
-    icon: "🇺🇸"
+    bgColor: "bg-blue-600",
+    icon: "🇺🇸",
+    otherLocation: "ecuador",
+    otherIcon: "🇪🇨",
+    otherName: "Ecuador"
   }
 };
 
 export default function AdminInventory() {
   const navigate = useNavigate();
-  const { location } = useParams(); // 'ecuador' or 'usa'
+  const { location } = useParams();
   const { user } = useAuth();
   const logoUrl = user?.tenant_logo || DEFAULT_LOGO;
   
@@ -65,6 +82,7 @@ export default function AdminInventory() {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [lowStockAlerts, setLowStockAlerts] = useState([]);
   
   // Dialogs
   const [productDialog, setProductDialog] = useState(false);
@@ -73,6 +91,24 @@ export default function AdminInventory() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [stockDialog, setStockDialog] = useState(false);
   const [stockProduct, setStockProduct] = useState(null);
+  const [transferDialog, setTransferDialog] = useState(false);
+  const [transferProduct, setTransferProduct] = useState(null);
+  const [invoiceDialog, setInvoiceDialog] = useState(false);
+  const [alertsDialog, setAlertsDialog] = useState(false);
+  
+  // Clients for invoice
+  const [clients, setClients] = useState([]);
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [clientSearch, setClientSearch] = useState("");
+  const [invoiceItems, setInvoiceItems] = useState([]);
+  
+  // Transfer data
+  const [targetProducts, setTargetProducts] = useState([]);
+  const [transferForm, setTransferForm] = useState({
+    quantity: "1",
+    targetProductId: "",
+    createNew: false
+  });
   
   // Form states
   const [productForm, setProductForm] = useState({
@@ -104,6 +140,7 @@ export default function AdminInventory() {
       return;
     }
     loadData();
+    loadLowStockAlerts();
   }, [location]);
 
   const loadData = async () => {
@@ -122,6 +159,34 @@ export default function AdminInventory() {
     }
   };
 
+  const loadLowStockAlerts = async () => {
+    try {
+      const res = await getLowStockAlerts(5, location);
+      setLowStockAlerts(res.data?.products || []);
+    } catch (e) {
+      console.error("Error loading alerts:", e);
+    }
+  };
+
+  const loadClients = async () => {
+    try {
+      const res = await getAllClients("active");
+      setClients(res.data || []);
+    } catch (e) {
+      console.error("Error loading clients:", e);
+    }
+  };
+
+  const loadTargetProducts = async () => {
+    try {
+      const res = await getProductsForTransfer(config.otherLocation);
+      setTargetProducts(res.data || []);
+    } catch (e) {
+      console.error("Error loading target products:", e);
+    }
+  };
+
+  // Product CRUD
   const openNewProduct = () => {
     setEditingProduct(null);
     setProductForm({
@@ -169,7 +234,6 @@ export default function AdminInventory() {
 
     try {
       if (editingProduct) {
-        // Don't send location on update
         const { location: _, ...updateData } = data;
         await updateInventoryProduct(editingProduct.id, updateData);
         toast.success("Producto actualizado");
@@ -179,6 +243,7 @@ export default function AdminInventory() {
       }
       setProductDialog(false);
       loadData();
+      loadLowStockAlerts();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Error al guardar");
     }
@@ -195,25 +260,20 @@ export default function AdminInventory() {
     }
   };
 
+  // Sale
   const openSaleDialog = (product) => {
     setSelectedProduct(product);
-    setSaleForm({
-      quantity: "1",
-      customer_id: "",
-      notes: ""
-    });
+    setSaleForm({ quantity: "1", customer_id: "", notes: "" });
     setSaleDialog(true);
   };
 
   const handleCreateSale = async () => {
     if (!selectedProduct) return;
-    
     const qty = parseInt(saleForm.quantity || 1);
     if (qty < 1) {
       toast.error("Cantidad debe ser al menos 1");
       return;
     }
-
     try {
       await createInventorySale({
         product_id: selectedProduct.id,
@@ -224,17 +284,16 @@ export default function AdminInventory() {
       toast.success("Venta registrada");
       setSaleDialog(false);
       loadData();
+      loadLowStockAlerts();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Error al registrar venta");
     }
   };
 
+  // Stock adjustment
   const openStockDialog = (product) => {
     setStockProduct(product);
-    setStockForm({
-      adjustment: "",
-      reason: ""
-    });
+    setStockForm({ adjustment: "", reason: "" });
     setStockDialog(true);
   };
 
@@ -243,18 +302,118 @@ export default function AdminInventory() {
       toast.error("Ingresa la cantidad a ajustar");
       return;
     }
-
     try {
-      await adjustInventoryStock(
-        stockProduct.id,
-        parseInt(stockForm.adjustment),
-        stockForm.reason || null
-      );
+      await adjustInventoryStock(stockProduct.id, parseInt(stockForm.adjustment), stockForm.reason || null);
       toast.success("Stock ajustado");
       setStockDialog(false);
       loadData();
+      loadLowStockAlerts();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Error al ajustar stock");
+    }
+  };
+
+  // Transfer
+  const openTransferDialog = (product) => {
+    setTransferProduct(product);
+    setTransferForm({ quantity: "1", targetProductId: "", createNew: false });
+    loadTargetProducts();
+    setTransferDialog(true);
+  };
+
+  const handleTransfer = async () => {
+    if (!transferProduct) return;
+    const qty = parseInt(transferForm.quantity || 1);
+    if (qty < 1) {
+      toast.error("Cantidad debe ser al menos 1");
+      return;
+    }
+    if (!transferForm.createNew && !transferForm.targetProductId) {
+      toast.error("Selecciona un producto destino o marca 'Crear nuevo'");
+      return;
+    }
+    try {
+      const res = await transferInventoryStock(
+        transferProduct.id,
+        qty,
+        transferForm.createNew ? null : transferForm.targetProductId,
+        transferForm.createNew
+      );
+      toast.success(res.data.message);
+      setTransferDialog(false);
+      loadData();
+      loadLowStockAlerts();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Error en transferencia");
+    }
+  };
+
+  // Invoice
+  const openInvoiceDialog = () => {
+    setSelectedClient(null);
+    setClientSearch("");
+    setInvoiceItems([]);
+    loadClients();
+    setInvoiceDialog(true);
+  };
+
+  const toggleInvoiceItem = (product) => {
+    const exists = invoiceItems.find(i => i.product_id === product.id);
+    if (exists) {
+      setInvoiceItems(invoiceItems.filter(i => i.product_id !== product.id));
+    } else {
+      setInvoiceItems([...invoiceItems, { 
+        product_id: product.id, 
+        name: product.name, 
+        quantity: 1,
+        price: product.sale_price,
+        stock: product.stock || 0
+      }]);
+    }
+  };
+
+  const updateInvoiceItemQty = (productId, qty) => {
+    setInvoiceItems(invoiceItems.map(i => 
+      i.product_id === productId ? { ...i, quantity: Math.max(1, Math.min(qty, i.stock)) } : i
+    ));
+  };
+
+  const handleCreateInvoicePurchases = async () => {
+    if (!selectedClient) {
+      toast.error("Selecciona un cliente");
+      return;
+    }
+    if (invoiceItems.length === 0) {
+      toast.error("Selecciona al menos un producto");
+      return;
+    }
+    try {
+      const items = invoiceItems.map(i => ({ product_id: i.product_id, quantity: i.quantity }));
+      const res = await createPurchasesFromInventory(items, selectedClient.customer_id);
+      
+      if (res.data.errors?.length > 0) {
+        res.data.errors.forEach(err => toast.error(`${err.product_name || err.product_id}: ${err.error}`));
+      }
+      
+      if (res.data.created_count > 0) {
+        toast.success(`${res.data.created_count} compras creadas para facturación`);
+        
+        // Show low stock alerts
+        if (res.data.low_stock_alerts?.length > 0) {
+          res.data.low_stock_alerts.forEach(alert => {
+            toast.warning(`⚠️ Stock bajo: ${alert.name} - Solo quedan ${alert.stock} unidades`, { duration: 5000 });
+          });
+        }
+        
+        setInvoiceDialog(false);
+        loadData();
+        loadLowStockAlerts();
+        
+        // Navigate to client invoices
+        navigate(`/admin/invoices?customer=${selectedClient.customer_id}`);
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Error al crear compras");
     }
   };
 
@@ -268,11 +427,23 @@ export default function AdminInventory() {
     );
   });
 
-  // Calculate summary stats
+  // Filter clients
+  const filteredClients = clients.filter(c => {
+    if (!clientSearch) return true;
+    const term = clientSearch.toLowerCase();
+    return c.name?.toLowerCase().includes(term) || 
+           c.customer_id?.toLowerCase().includes(term) ||
+           c.email?.toLowerCase().includes(term);
+  });
+
+  // Calculate totals
   const totalProducts = filteredProducts.length;
   const totalStock = filteredProducts.reduce((s, p) => s + (p.stock || 0), 0);
   const totalStockValue = filteredProducts.reduce((s, p) => s + p.cost * (p.stock || 0), 0);
   const lowStockCount = filteredProducts.filter(p => (p.stock || 0) < 5).length;
+
+  // Invoice totals
+  const invoiceTotal = invoiceItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
 
   if (loading) {
     return (
@@ -287,12 +458,39 @@ export default function AdminInventory() {
       {/* Header */}
       <div className="bg-white/90 backdrop-blur-sm border-b border-gray-100 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/admin")} data-testid="back-btn">
+          <Button variant="ghost" size="sm" onClick={() => navigate("/admin/inventory")} data-testid="back-btn">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <img src={logoUrl} alt="Logo" className="h-10 object-contain" />
           <span className="font-bold text-slate-800">Inventario {config.icon} {config.name}</span>
+          
+          {/* Low stock alert badge */}
+          {lowStockAlerts.length > 0 && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="relative"
+              onClick={() => setAlertsDialog(true)}
+              data-testid="alerts-btn"
+            >
+              <Bell className="h-5 w-5 text-red-500" />
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                {lowStockAlerts.length}
+              </span>
+            </Button>
+          )}
+          
           <div className="ml-auto flex gap-2">
+            <Button
+              onClick={openInvoiceDialog}
+              variant="outline"
+              size="sm"
+              className="gap-2 border-green-500 text-green-700 hover:bg-green-50"
+              data-testid="invoice-btn"
+            >
+              <FileText className="h-4 w-4" />
+              Facturar
+            </Button>
             <Button
               onClick={() => navigate(`/admin/inventory-stats/${location}`)}
               variant="outline"
@@ -306,17 +504,38 @@ export default function AdminInventory() {
             <Button
               onClick={openNewProduct}
               size="sm"
-              className="gap-2 bg-blue-600 hover:bg-blue-700"
+              className={`gap-2 ${config.bgColor} hover:opacity-90`}
               data-testid="new-product-btn"
             >
               <Plus className="h-4 w-4" />
-              Nuevo Producto
+              Nuevo
             </Button>
           </div>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+        {/* Low Stock Alert Banner */}
+        {lowStockAlerts.length > 0 && (
+          <Card className="rounded-xl bg-gradient-to-r from-red-50 to-orange-50 border-red-200">
+            <CardContent className="p-4 flex items-center gap-3">
+              <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-semibold text-red-700">
+                  {lowStockAlerts.length} producto(s) con stock bajo
+                </p>
+                <p className="text-sm text-red-600">
+                  {lowStockAlerts.slice(0, 3).map(p => p.name).join(", ")}
+                  {lowStockAlerts.length > 3 && ` y ${lowStockAlerts.length - 3} más...`}
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setAlertsDialog(true)}>
+                Ver todos
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card className={`rounded-xl bg-gradient-to-br ${config.color} ${config.borderColor}`}>
@@ -385,8 +604,7 @@ export default function AdminInventory() {
                     <tr className="border-b bg-gray-50">
                       <th className="text-left p-2 font-medium">Producto</th>
                       <th className="text-right p-2 font-medium">Costo</th>
-                      <th className="text-right p-2 font-medium">Precio Venta</th>
-                      <th className="text-right p-2 font-medium">Impuesto</th>
+                      <th className="text-right p-2 font-medium">Precio</th>
                       <th className="text-center p-2 font-medium">Stock</th>
                       <th className="text-right p-2 font-medium">Margen</th>
                       <th className="text-center p-2 font-medium">Acciones</th>
@@ -407,22 +625,14 @@ export default function AdminInventory() {
                         >
                           <td className="p-2">
                             <div className="font-medium text-slate-800">{product.name}</div>
-                            {product.sku && (
-                              <div className="text-xs text-gray-500">SKU: {product.sku}</div>
-                            )}
+                            {product.sku && <div className="text-xs text-gray-500">SKU: {product.sku}</div>}
                           </td>
                           <td className="p-2 text-right font-mono">{formatMoney(product.cost)}</td>
                           <td className="p-2 text-right font-mono font-semibold text-green-700">
                             {formatMoney(product.sale_price)}
                           </td>
-                          <td className="p-2 text-right text-gray-600">
-                            {((product.tax_rate || 0) * 100).toFixed(1)}%
-                          </td>
                           <td className="p-2 text-center">
-                            <Badge 
-                              variant={isLowStock ? "destructive" : "outline"}
-                              className="font-mono"
-                            >
+                            <Badge variant={isLowStock ? "destructive" : "outline"} className="font-mono">
                               {stock}
                             </Badge>
                           </td>
@@ -432,6 +642,15 @@ export default function AdminInventory() {
                           </td>
                           <td className="p-2">
                             <div className="flex justify-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => openTransferDialog(product)}
+                                title={`Transferir a ${config.otherName}`}
+                                data-testid={`transfer-${product.id}`}
+                              >
+                                <ArrowRightLeft className="h-4 w-4 text-purple-600" />
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -492,11 +711,7 @@ export default function AdminInventory() {
             <CardContent>
               <div className="space-y-2">
                 {sales.slice(0, 10).map((sale) => (
-                  <div 
-                    key={sale.id} 
-                    className="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
-                    data-testid={`sale-row-${sale.id}`}
-                  >
+                  <div key={sale.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                     <div>
                       <p className="font-medium text-slate-800">{sale.product_name}</p>
                       <p className="text-xs text-gray-500">
@@ -520,93 +735,41 @@ export default function AdminInventory() {
       <Dialog open={productDialog} onOpenChange={setProductDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              {editingProduct ? "Editar Producto" : `Nuevo Producto ${config.name}`}
-            </DialogTitle>
+            <DialogTitle>{editingProduct ? "Editar Producto" : `Nuevo Producto ${config.name}`}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
               <Label>Nombre *</Label>
-              <Input
-                value={productForm.name}
-                onChange={(e) => setProductForm({...productForm, name: e.target.value})}
-                placeholder="Nombre del producto"
-                data-testid="product-name-input"
-              />
+              <Input value={productForm.name} onChange={(e) => setProductForm({...productForm, name: e.target.value})} data-testid="product-name-input" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Costo *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={productForm.cost}
-                  onChange={(e) => setProductForm({...productForm, cost: e.target.value})}
-                  placeholder="0.00"
-                  data-testid="product-cost-input"
-                />
+                <Input type="number" step="0.01" value={productForm.cost} onChange={(e) => setProductForm({...productForm, cost: e.target.value})} data-testid="product-cost-input" />
               </div>
               <div>
                 <Label>Precio Venta *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={productForm.sale_price}
-                  onChange={(e) => setProductForm({...productForm, sale_price: e.target.value})}
-                  placeholder="0.00"
-                  data-testid="product-price-input"
-                />
+                <Input type="number" step="0.01" value={productForm.sale_price} onChange={(e) => setProductForm({...productForm, sale_price: e.target.value})} data-testid="product-price-input" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Impuesto (%)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={productForm.tax_rate}
-                  onChange={(e) => setProductForm({...productForm, tax_rate: e.target.value})}
-                  placeholder="8.25"
-                  data-testid="product-tax-input"
-                />
+                <Input type="number" step="0.01" value={productForm.tax_rate} onChange={(e) => setProductForm({...productForm, tax_rate: e.target.value})} data-testid="product-tax-input" />
               </div>
               <div>
-                <Label>Stock Inicial</Label>
-                <Input
-                  type="number"
-                  value={productForm.stock}
-                  onChange={(e) => setProductForm({...productForm, stock: e.target.value})}
-                  placeholder="0"
-                  data-testid="product-stock-input"
-                />
+                <Label>Stock</Label>
+                <Input type="number" value={productForm.stock} onChange={(e) => setProductForm({...productForm, stock: e.target.value})} data-testid="product-stock-input" />
               </div>
             </div>
             <div>
               <Label>SKU (opcional)</Label>
-              <Input
-                value={productForm.sku}
-                onChange={(e) => setProductForm({...productForm, sku: e.target.value})}
-                placeholder="Código de producto"
-                data-testid="product-sku-input"
-              />
-            </div>
-            <div>
-              <Label>Descripción (opcional)</Label>
-              <Input
-                value={productForm.description}
-                onChange={(e) => setProductForm({...productForm, description: e.target.value})}
-                placeholder="Descripción breve"
-                data-testid="product-description-input"
-              />
+              <Input value={productForm.sku} onChange={(e) => setProductForm({...productForm, sku: e.target.value})} data-testid="product-sku-input" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setProductDialog(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveProduct} data-testid="save-product-btn">
-              {editingProduct ? "Actualizar" : "Crear"}
-            </Button>
+            <Button variant="outline" onClick={() => setProductDialog(false)}>Cancelar</Button>
+            <Button onClick={handleSaveProduct} data-testid="save-product-btn">{editingProduct ? "Actualizar" : "Crear"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -615,83 +778,27 @@ export default function AdminInventory() {
       <Dialog open={saleDialog} onOpenChange={setSaleDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Registrar Venta {config.name}</DialogTitle>
+            <DialogTitle>Registrar Venta</DialogTitle>
           </DialogHeader>
           {selectedProduct && (
             <div className="space-y-4 py-4">
               <div className={`bg-gradient-to-br ${config.color} p-3 rounded-lg`}>
-                <p className="font-bold text-slate-800">{selectedProduct.name}</p>
-                <p className="text-sm text-gray-600">
-                  Precio: {formatMoney(selectedProduct.sale_price)}
-                  {selectedProduct.tax_rate > 0 && ` + ${(selectedProduct.tax_rate * 100).toFixed(1)}% imp.`}
-                </p>
-                <p className="text-xs mt-1">
-                  Stock disponible: <strong>{selectedProduct.stock || 0}</strong>
-                </p>
+                <p className="font-bold">{selectedProduct.name}</p>
+                <p className="text-sm">Precio: {formatMoney(selectedProduct.sale_price)} • Stock: {selectedProduct.stock || 0}</p>
               </div>
               <div>
                 <Label>Cantidad</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={saleForm.quantity}
-                  onChange={(e) => setSaleForm({...saleForm, quantity: e.target.value})}
-                  data-testid="sale-quantity-input"
-                />
+                <Input type="number" min="1" value={saleForm.quantity} onChange={(e) => setSaleForm({...saleForm, quantity: e.target.value})} data-testid="sale-quantity-input" />
               </div>
               <div>
-                <Label>Código Cliente (opcional)</Label>
-                <Input
-                  value={saleForm.customer_id}
-                  onChange={(e) => setSaleForm({...saleForm, customer_id: e.target.value})}
-                  placeholder="Ej: ABC123"
-                  data-testid="sale-customer-input"
-                />
-              </div>
-              <div>
-                <Label>Notas (opcional)</Label>
-                <Input
-                  value={saleForm.notes}
-                  onChange={(e) => setSaleForm({...saleForm, notes: e.target.value})}
-                  placeholder="Notas adicionales"
-                  data-testid="sale-notes-input"
-                />
-              </div>
-              <div className="bg-green-50 p-3 rounded-lg">
-                <div className="flex justify-between text-sm">
-                  <span>Subtotal:</span>
-                  <span>{formatMoney(selectedProduct.sale_price * (parseInt(saleForm.quantity) || 1))}</span>
-                </div>
-                {selectedProduct.tax_rate > 0 && (
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>Impuesto:</span>
-                    <span>{formatMoney(selectedProduct.sale_price * (parseInt(saleForm.quantity) || 1) * selectedProduct.tax_rate)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-bold mt-1 pt-1 border-t">
-                  <span>Total:</span>
-                  <span className="text-green-700">
-                    {formatMoney(
-                      selectedProduct.sale_price * (parseInt(saleForm.quantity) || 1) * (1 + (selectedProduct.tax_rate || 0))
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs text-blue-600 mt-1">
-                  <span>Ganancia:</span>
-                  <span>
-                    {formatMoney((selectedProduct.sale_price - selectedProduct.cost) * (parseInt(saleForm.quantity) || 1))}
-                  </span>
-                </div>
+                <Label>Cliente (opcional)</Label>
+                <Input value={saleForm.customer_id} onChange={(e) => setSaleForm({...saleForm, customer_id: e.target.value})} placeholder="Código cliente" data-testid="sale-customer-input" />
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSaleDialog(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleCreateSale} className="bg-green-600 hover:bg-green-700" data-testid="confirm-sale-btn">
-              Registrar Venta
-            </Button>
+            <Button variant="outline" onClick={() => setSaleDialog(false)}>Cancelar</Button>
+            <Button onClick={handleCreateSale} className="bg-green-600 hover:bg-green-700" data-testid="confirm-sale-btn">Registrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -705,42 +812,237 @@ export default function AdminInventory() {
           {stockProduct && (
             <div className="space-y-4 py-4">
               <div className={`bg-gradient-to-br ${config.color} p-3 rounded-lg`}>
-                <p className="font-bold text-slate-800">{stockProduct.name}</p>
-                <p className="text-sm mt-1">
-                  Stock actual: <strong>{stockProduct.stock || 0}</strong>
-                </p>
+                <p className="font-bold">{stockProduct.name}</p>
+                <p className="text-sm">Stock actual: {stockProduct.stock || 0}</p>
               </div>
               <div>
                 <Label>Ajuste (+/-)</Label>
-                <Input
-                  type="number"
-                  value={stockForm.adjustment}
-                  onChange={(e) => setStockForm({...stockForm, adjustment: e.target.value})}
-                  placeholder="Ej: 10 o -5"
-                  data-testid="stock-adjustment-input"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Positivo para agregar, negativo para restar
-                </p>
+                <Input type="number" value={stockForm.adjustment} onChange={(e) => setStockForm({...stockForm, adjustment: e.target.value})} placeholder="Ej: 10 o -5" data-testid="stock-adjustment-input" />
               </div>
               <div>
                 <Label>Razón (opcional)</Label>
-                <Input
-                  value={stockForm.reason}
-                  onChange={(e) => setStockForm({...stockForm, reason: e.target.value})}
-                  placeholder="Ej: Ingreso de mercadería"
-                  data-testid="stock-reason-input"
-                />
+                <Input value={stockForm.reason} onChange={(e) => setStockForm({...stockForm, reason: e.target.value})} data-testid="stock-reason-input" />
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setStockDialog(false)}>
-              Cancelar
+            <Button variant="outline" onClick={() => setStockDialog(false)}>Cancelar</Button>
+            <Button onClick={handleAdjustStock} data-testid="confirm-adjustment-btn">Aplicar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Dialog */}
+      <Dialog open={transferDialog} onOpenChange={setTransferDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Transferir a {config.otherIcon} {config.otherName}</DialogTitle>
+          </DialogHeader>
+          {transferProduct && (
+            <div className="space-y-4 py-4">
+              <div className={`bg-gradient-to-br ${config.color} p-3 rounded-lg`}>
+                <p className="font-bold">{transferProduct.name}</p>
+                <p className="text-sm">Stock disponible en {config.name}: {transferProduct.stock || 0}</p>
+              </div>
+              <div>
+                <Label>Cantidad a transferir</Label>
+                <Input type="number" min="1" max={transferProduct.stock || 0} value={transferForm.quantity} onChange={(e) => setTransferForm({...transferForm, quantity: e.target.value})} data-testid="transfer-quantity-input" />
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="create-new" 
+                  checked={transferForm.createNew} 
+                  onCheckedChange={(checked) => setTransferForm({...transferForm, createNew: checked, targetProductId: ""})}
+                />
+                <Label htmlFor="create-new" className="cursor-pointer">Crear producto nuevo en {config.otherName}</Label>
+              </div>
+              {!transferForm.createNew && (
+                <div>
+                  <Label>O seleccionar producto existente en {config.otherName}</Label>
+                  <select
+                    value={transferForm.targetProductId}
+                    onChange={(e) => setTransferForm({...transferForm, targetProductId: e.target.value})}
+                    className="w-full border rounded-md px-3 py-2 bg-white mt-1"
+                    data-testid="transfer-target-select"
+                  >
+                    <option value="">-- Seleccionar --</option>
+                    {targetProducts.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} (Stock: {p.stock})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="bg-purple-50 p-3 rounded-lg text-center">
+                <ArrowRightLeft className="h-6 w-6 mx-auto text-purple-600 mb-2" />
+                <p className="text-sm text-purple-700">
+                  {transferForm.quantity || 0} unidades de {config.icon} {config.name} → {config.otherIcon} {config.otherName}
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTransferDialog(false)}>Cancelar</Button>
+            <Button onClick={handleTransfer} className="bg-purple-600 hover:bg-purple-700" data-testid="confirm-transfer-btn">Transferir</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invoice Dialog */}
+      <Dialog open={invoiceDialog} onOpenChange={setInvoiceDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-green-600" />
+              Facturar Productos de Inventario {config.icon}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Client Selection */}
+            <div>
+              <Label className="font-semibold">1. Seleccionar Cliente</Label>
+              <Input
+                placeholder="Buscar cliente por nombre o código..."
+                value={clientSearch}
+                onChange={(e) => setClientSearch(e.target.value)}
+                className="mt-2"
+                data-testid="client-search-input"
+              />
+              {selectedClient ? (
+                <div className="mt-2 p-3 bg-green-50 rounded-lg border border-green-200 flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-green-800">{selectedClient.name}</p>
+                    <p className="text-sm text-green-600">{selectedClient.customer_id}</p>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => setSelectedClient(null)}>Cambiar</Button>
+                </div>
+              ) : (
+                <div className="mt-2 max-h-40 overflow-y-auto border rounded-lg">
+                  {filteredClients.slice(0, 20).map(client => (
+                    <div
+                      key={client.id}
+                      onClick={() => setSelectedClient(client)}
+                      className="p-2 hover:bg-gray-50 cursor-pointer border-b last:border-b-0 flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="font-medium">{client.name}</p>
+                        <p className="text-xs text-gray-500">{client.customer_id}</p>
+                      </div>
+                      <Check className="h-4 w-4 text-gray-300" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Product Selection */}
+            <div>
+              <Label className="font-semibold">2. Seleccionar Productos</Label>
+              <p className="text-xs text-gray-500 mb-2">Los productos se marcarán como [INVENTARIO] en la factura</p>
+              <div className="mt-2 max-h-60 overflow-y-auto border rounded-lg">
+                {filteredProducts.filter(p => (p.stock || 0) > 0).map(product => {
+                  const isSelected = invoiceItems.find(i => i.product_id === product.id);
+                  return (
+                    <div
+                      key={product.id}
+                      className={`p-3 border-b last:border-b-0 ${isSelected ? 'bg-green-50' : 'hover:bg-gray-50'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          checked={!!isSelected}
+                          onCheckedChange={() => toggleInvoiceItem(product)}
+                          data-testid={`invoice-item-${product.id}`}
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium">{product.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {formatMoney(product.sale_price)} • Stock: {product.stock}
+                          </p>
+                        </div>
+                        {isSelected && (
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs">Cant:</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              max={product.stock}
+                              value={isSelected.quantity}
+                              onChange={(e) => updateInvoiceItemQty(product.id, parseInt(e.target.value) || 1)}
+                              className="w-16 h-8 text-center"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Summary */}
+            {invoiceItems.length > 0 && (
+              <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                <p className="font-semibold text-amber-800 mb-2">Resumen de Facturación</p>
+                {invoiceItems.map(item => (
+                  <div key={item.product_id} className="flex justify-between text-sm py-1">
+                    <span>[INVENTARIO] {item.name} x{item.quantity}</span>
+                    <span className="font-mono">{formatMoney(item.price * item.quantity)}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between font-bold mt-2 pt-2 border-t border-amber-300">
+                  <span>Total</span>
+                  <span className="text-green-700">{formatMoney(invoiceTotal)}</span>
+                </div>
+                <p className="text-xs text-amber-600 mt-2">
+                  * Se crearán compras pendientes que podrás facturar desde el módulo de Facturas
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInvoiceDialog(false)}>Cancelar</Button>
+            <Button 
+              onClick={handleCreateInvoicePurchases} 
+              className="bg-green-600 hover:bg-green-700"
+              disabled={!selectedClient || invoiceItems.length === 0}
+              data-testid="create-invoice-purchases-btn"
+            >
+              Crear Compras para Facturar
             </Button>
-            <Button onClick={handleAdjustStock} data-testid="confirm-adjustment-btn">
-              Aplicar Ajuste
-            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Low Stock Alerts Dialog */}
+      <Dialog open={alertsDialog} onOpenChange={setAlertsDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <AlertTriangle className="h-5 w-5" />
+              Alertas de Stock Bajo
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-gray-500 mb-4">
+              Productos con menos de 5 unidades en {config.name}
+            </p>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {lowStockAlerts.map(product => (
+                <div key={product.id} className="bg-red-50 p-3 rounded-lg border border-red-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-slate-800">{product.name}</p>
+                      {product.sku && <p className="text-xs text-gray-500">SKU: {product.sku}</p>}
+                    </div>
+                    <Badge variant="destructive" className="font-mono">
+                      {product.stock} uds
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setAlertsDialog(false)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

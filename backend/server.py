@@ -10833,6 +10833,269 @@ async def adjust_inventory_stock(
     }
 
 
+@api_router.post("/inventory/products/{product_id}/transfer")
+async def transfer_inventory_stock(
+    product_id: str,
+    quantity: int = Body(..., embed=True),
+    target_product_id: Optional[str] = Body(None, embed=True),
+    create_new: bool = Body(False, embed=True),
+    user=Depends(get_current_user)
+):
+    """Transfer stock from one location to another.
+    Either specify target_product_id to transfer to existing product,
+    or set create_new=True to create a new product in the other location.
+    """
+    # Get source product
+    source = await db.inventory_products.find_one(
+        {"id": product_id, "tenant_id": user["tenant_id"]}
+    )
+    if not source:
+        raise HTTPException(status_code=404, detail="Producto origen no encontrado")
+    
+    current_stock = source.get("stock", 0)
+    if current_stock < quantity:
+        raise HTTPException(status_code=400, detail=f"Stock insuficiente. Disponible: {current_stock}")
+    
+    source_location = source.get("location", "ecuador")
+    target_location = "usa" if source_location == "ecuador" else "ecuador"
+    
+    if create_new:
+        # Create new product in target location
+        new_product = InventoryProduct(
+            tenant_id=user["tenant_id"],
+            location=target_location,
+            name=source["name"],
+            cost=source["cost"],
+            sale_price=source["sale_price"],
+            tax_rate=source.get("tax_rate", 0),
+            stock=quantity,
+            sku=source.get("sku"),
+            description=source.get("description")
+        )
+        await db.inventory_products.insert_one(new_product.model_dump())
+        target_product_id = new_product.id
+        target_name = new_product.name
+    else:
+        if not target_product_id:
+            raise HTTPException(status_code=400, detail="Debe especificar producto destino o create_new=True")
+        
+        # Get target product
+        target = await db.inventory_products.find_one(
+            {"id": target_product_id, "tenant_id": user["tenant_id"], "location": target_location}
+        )
+        if not target:
+            raise HTTPException(status_code=404, detail="Producto destino no encontrado en la ubicación correcta")
+        
+        # Add stock to target
+        await db.inventory_products.update_one(
+            {"id": target_product_id},
+            {
+                "$inc": {"stock": quantity},
+                "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+            }
+        )
+        target_name = target["name"]
+    
+    # Reduce stock from source
+    await db.inventory_products.update_one(
+        {"id": product_id},
+        {
+            "$inc": {"stock": -quantity},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+    
+    # Log the transfer
+    await db.audit_logs.insert_one({
+        "id": str(uuid.uuid4()),
+        "tenant_id": user["tenant_id"],
+        "user_id": user.get("user_id"),
+        "user_name": user.get("name", "Admin"),
+        "user_role": user.get("role", "admin"),
+        "action": "inventory_transfer",
+        "entity_type": "inventory_product",
+        "entity_id": product_id,
+        "entity_name": source["name"],
+        "details": {
+            "source_location": source_location,
+            "target_location": target_location,
+            "quantity": quantity,
+            "source_product_id": product_id,
+            "target_product_id": target_product_id,
+            "created_new": create_new
+        },
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {
+        "message": f"Transferencia completada: {quantity} unidades de {source_location.upper()} a {target_location.upper()}",
+        "source_product": source["name"],
+        "target_product": target_name,
+        "quantity": quantity,
+        "target_product_id": target_product_id
+    }
+
+
+@api_router.get("/inventory/products-for-transfer")
+async def get_products_for_transfer(
+    target_location: str = Query(...),
+    user=Depends(get_current_user)
+):
+    """Get products in target location for transfer selection"""
+    products = await db.inventory_products.find(
+        {"tenant_id": user["tenant_id"], "location": target_location, "is_active": True},
+        {"_id": 0, "id": 1, "name": 1, "sku": 1, "stock": 1}
+    ).sort("name", 1).to_list(500)
+    return products
+
+
+@api_router.post("/inventory/create-purchases")
+async def create_purchases_from_inventory(
+    items: List[dict] = Body(...),
+    customer_id: str = Body(...),
+    user=Depends(get_current_user)
+):
+    """Create purchases from inventory items for invoicing.
+    Each item: {product_id, quantity}
+    These purchases will be marked with entry_source='inventory' and can be invoiced normally.
+    """
+    tenant_id = user["tenant_id"]
+    
+    # Get customer
+    customer = await db.users.find_one({"customer_id": customer_id, "tenant_id": tenant_id})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    created_purchases = []
+    errors = []
+    
+    for item in items:
+        product_id = item.get("product_id")
+        quantity = item.get("quantity", 1)
+        
+        # Get product
+        product = await db.inventory_products.find_one(
+            {"id": product_id, "tenant_id": tenant_id}
+        )
+        if not product:
+            errors.append({"product_id": product_id, "error": "Producto no encontrado"})
+            continue
+        
+        current_stock = product.get("stock", 0)
+        if current_stock < quantity:
+            errors.append({
+                "product_id": product_id, 
+                "product_name": product["name"],
+                "error": f"Stock insuficiente. Disponible: {current_stock}"
+            })
+            continue
+        
+        # Calculate amounts
+        price = product["sale_price"]
+        tax_rate = product.get("tax_rate", 0)
+        tax = price * tax_rate
+        price_with_tax = price + tax
+        commission = customer.get("commission_fee", 0)
+        
+        # Create purchase for each unit (or batch)
+        for i in range(quantity):
+            purchase = Purchase(
+                tenant_id=tenant_id,
+                user_id=customer["id"],
+                customer_id=customer_id,
+                item_name=f"[INVENTARIO] {product['name']}",
+                store=f"Inventario {product.get('location', 'ecuador').upper()}",
+                price=price,
+                tax=tax,
+                price_with_tax=price_with_tax,
+                commission=commission,
+                total=price_with_tax + commission,
+                status="confirmed",
+                live_id=f"inventory_{product_id}"  # Special marker
+            )
+            await db.purchases.insert_one(purchase.model_dump())
+            created_purchases.append(purchase.model_dump())
+        
+        # Reduce inventory stock
+        await db.inventory_products.update_one(
+            {"id": product_id},
+            {
+                "$inc": {"stock": -quantity},
+                "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+            }
+        )
+        
+        # Record inventory sale
+        sale = InventorySale(
+            tenant_id=tenant_id,
+            product_id=product_id,
+            product_name=product["name"],
+            customer_id=customer_id,
+            customer_name=customer.get("name"),
+            quantity=quantity,
+            unit_cost=product["cost"],
+            unit_price=price,
+            tax_rate=tax_rate,
+            tax_amount=tax * quantity,
+            total_amount=price_with_tax * quantity,
+            profit=(price - product["cost"]) * quantity,
+            location=product.get("location", "ecuador"),
+            notes="Creado para facturación",
+            sold_by=user.get("user_id"),
+            sold_by_name=user.get("name")
+        )
+        await db.inventory_sales.insert_one(sale.model_dump())
+    
+    # Check for low stock alerts
+    low_stock_alerts = []
+    for item in items:
+        product = await db.inventory_products.find_one(
+            {"id": item.get("product_id"), "tenant_id": tenant_id},
+            {"_id": 0, "id": 1, "name": 1, "stock": 1, "location": 1}
+        )
+        if product and product.get("stock", 0) < 5:
+            low_stock_alerts.append({
+                "product_id": product["id"],
+                "name": product["name"],
+                "stock": product["stock"],
+                "location": product.get("location")
+            })
+    
+    return {
+        "message": f"Se crearon {len(created_purchases)} compras para facturación",
+        "created_count": len(created_purchases),
+        "errors": errors,
+        "low_stock_alerts": low_stock_alerts
+    }
+
+
+@api_router.get("/inventory/low-stock-alerts")
+async def get_low_stock_alerts(
+    threshold: int = 5,
+    location: Optional[str] = None,
+    user=Depends(get_current_user)
+):
+    """Get products with stock below threshold"""
+    query = {
+        "tenant_id": user["tenant_id"],
+        "is_active": True,
+        "stock": {"$lt": threshold}
+    }
+    if location:
+        query["location"] = location
+    
+    products = await db.inventory_products.find(
+        query,
+        {"_id": 0, "id": 1, "name": 1, "stock": 1, "location": 1, "sku": 1}
+    ).sort("stock", 1).to_list(100)
+    
+    return {
+        "threshold": threshold,
+        "count": len(products),
+        "products": products
+    }
+
+
 app.include_router(api_router)
 
 class NoCacheMiddleware(BaseHTTPMiddleware):
