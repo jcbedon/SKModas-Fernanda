@@ -61,7 +61,13 @@ export default function SuperadminDashboard() {
     invoice_show_tax_per_item: true,
     invoice_show_tax_summary: true,
     shipment_show_product_list: true,
-    allow_custom_client_id: false
+    allow_custom_client_id: false,
+    live_module_enabled: false,
+    // Late fee settings
+    late_fee_enabled: false,
+    late_fee_grace_hours: 24,
+    late_fee_description: "Recargo por demora en pago",
+    shipping_categories: []
   });
 
   const DEFAULT_TAX_OPTIONS = [
@@ -407,7 +413,12 @@ export default function SuperadminDashboard() {
       invoice_show_tax_summary: tenant.invoice_show_tax_summary !== false,
       shipment_show_product_list: tenant.shipment_show_product_list !== false,
       allow_custom_client_id: tenant.allow_custom_client_id === true,
-      live_module_enabled: tenant.live_module_enabled === true
+      live_module_enabled: tenant.live_module_enabled === true,
+      // Late fee settings
+      late_fee_enabled: tenant.late_fee_enabled === true,
+      late_fee_grace_hours: tenant.late_fee_grace_hours || 24,
+      late_fee_description: tenant.late_fee_description || "Recargo por demora en pago",
+      shipping_categories: tenant.shipping_categories || []
     });
     setSettingsDialogOpen(true);
   };
@@ -1373,6 +1384,113 @@ export default function SuperadminDashboard() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Late Fee / Recargo por Mora Section */}
+              <div className="border-2 border-amber-200 rounded-xl p-4 bg-amber-50/50">
+                <h4 className="font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-amber-600" />
+                  Recargo por Mora
+                </h4>
+                
+                {/* Enable toggle */}
+                <div
+                  className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all mb-4 ${
+                    tenantSettings.late_fee_enabled
+                      ? 'bg-amber-100 border border-amber-300'
+                      : 'bg-white border border-gray-200 hover:bg-gray-50'
+                  }`}
+                  onClick={() => setTenantSettings({...tenantSettings, late_fee_enabled: !tenantSettings.late_fee_enabled})}
+                  data-testid="toggle-late-fee"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Habilitar Recargo por Mora</p>
+                    <p className="text-xs text-gray-500 mt-1">Aplicar recargo automático después del tiempo de gracia</p>
+                  </div>
+                  <div className={`px-3 py-1.5 rounded-full text-xs font-bold ${
+                    tenantSettings.late_fee_enabled
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-gray-300 text-gray-600'
+                  }`}>
+                    {tenantSettings.late_fee_enabled ? 'ACTIVO' : 'INACTIVO'}
+                  </div>
+                </div>
+
+                {/* Configuration fields - only shown when enabled */}
+                {tenantSettings.late_fee_enabled && (
+                  <div className="space-y-4 animate-in slide-in-from-top-2">
+                    {/* Grace hours */}
+                    <div>
+                      <Label className="text-xs text-amber-800 font-semibold">Tiempo de Gracia (horas)</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          type="number"
+                          min="1"
+                          value={tenantSettings.late_fee_grace_hours}
+                          onChange={(e) => setTenantSettings({...tenantSettings, late_fee_grace_hours: Math.max(1, parseInt(e.target.value) || 24)})}
+                          className="h-10 rounded-lg w-24 text-center font-bold"
+                        />
+                        <span className="text-sm text-gray-600">horas después de crear la factura</span>
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    <div>
+                      <Label className="text-xs text-amber-800 font-semibold">Descripción del Recargo</Label>
+                      <Input
+                        value={tenantSettings.late_fee_description}
+                        onChange={(e) => setTenantSettings({...tenantSettings, late_fee_description: e.target.value})}
+                        placeholder="Ej: Recargo por demora en pago"
+                        className="h-10 rounded-lg mt-1"
+                      />
+                    </div>
+
+                    {/* Late fee per shipping category */}
+                    <div>
+                      <Label className="text-xs text-amber-800 font-semibold mb-2 block">Recargo por Categoría de Envío</Label>
+                      <div className="space-y-2">
+                        {(tenantSettings.shipping_categories || []).map((cat, idx) => (
+                          <div key={cat.key || idx} className="flex items-center gap-3 p-2 bg-white rounded-lg border border-amber-200">
+                            <span className="w-24 text-sm font-bold text-gray-700">{cat.key}</span>
+                            <span className="flex-1 text-xs text-gray-500 truncate">{cat.label}</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-sm text-gray-500">$</span>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={cat.late_fee || 0}
+                                onChange={(e) => {
+                                  const newCategories = [...tenantSettings.shipping_categories];
+                                  newCategories[idx] = { ...cat, late_fee: parseFloat(e.target.value) || 0 };
+                                  setTenantSettings({...tenantSettings, shipping_categories: newCategories});
+                                }}
+                                className="h-8 w-20 text-center font-bold rounded"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                        {(!tenantSettings.shipping_categories || tenantSettings.shipping_categories.length === 0) && (
+                          <p className="text-xs text-amber-600 italic">No hay categorías de envío configuradas. Configúralas en "Categorías de Envío".</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Preview */}
+                    {tenantSettings.shipping_categories?.some(c => c.late_fee > 0) && (
+                      <div className="p-3 bg-amber-100 rounded-lg border border-amber-300">
+                        <p className="text-xs font-semibold text-amber-800 mb-1">Vista previa:</p>
+                        <p className="text-xs text-amber-700">
+                          Si una factura con envío de categoría{' '}
+                          {tenantSettings.shipping_categories.filter(c => c.late_fee > 0).map(c => 
+                            <span key={c.key} className="font-bold">{c.key} (${c.late_fee})</span>
+                          ).reduce((prev, curr, i) => [prev, i === 0 ? '' : ', ', curr], [])}
+                          {' '}no se paga en {tenantSettings.late_fee_grace_hours}h, se aplicará el recargo correspondiente.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <Button

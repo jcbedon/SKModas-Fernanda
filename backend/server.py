@@ -249,10 +249,14 @@ class Tenant(BaseModel):
     shipment_show_product_list: bool = True  # Show product list when creating shipment
     shipping_mode: str = "packages"  # "packages" | "pounds" — determines unit label in shipment creation
     shipping_categories: List[dict] = Field(default_factory=lambda: [
-        {"key": "G", "label": "Categoría G (CON Núcleo Familiar)", "value_packages": 32, "value_pounds": 32},
-        {"key": "A", "label": "Categoría A (Personal)", "value_packages": 42, "value_pounds": 42},
-        {"key": "B", "label": "Categoría B (SIN Núcleo Familiar)", "value_packages": 52, "value_pounds": 52}
+        {"key": "G", "label": "Categoría G (CON Núcleo Familiar)", "value_packages": 32, "value_pounds": 32, "late_fee": 0},
+        {"key": "A", "label": "Categoría A (Personal)", "value_packages": 42, "value_pounds": 42, "late_fee": 0},
+        {"key": "B", "label": "Categoría B (SIN Núcleo Familiar)", "value_packages": 52, "value_pounds": 52, "late_fee": 0}
     ])
+    # Late Fee settings - applies per shipping category after grace period
+    late_fee_enabled: bool = False
+    late_fee_grace_hours: int = 24  # Hours after invoice creation before late fee applies
+    late_fee_description: str = "Recargo por demora en pago"
     # Client ID settings
     allow_custom_client_id: bool = False  # Allow admin to enter custom client ID instead of auto-generated
     # Feature toggles per tenant (controlled by superadmin)
@@ -413,6 +417,12 @@ class Invoice(BaseModel):
     annulled_at: Optional[str] = None
     annulled_by: Optional[str] = None
     annulled_by_name: Optional[str] = None
+    # Late fee fields
+    late_fee_applied: bool = False
+    late_fee_amount: float = 0.0
+    late_fee_description: Optional[str] = None
+    late_fee_applied_at: Optional[str] = None
+    late_fee_category: Optional[str] = None  # The shipping category that triggered the fee
 
 class Shipment(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -2385,6 +2395,17 @@ async def update_tenant_settings(tenant_id: str, data: dict, current_user: dict 
     # Live fast-entry module (opt-in per tenant)
     if "live_module_enabled" in data:
         update_fields["live_module_enabled"] = bool(data["live_module_enabled"])
+
+    # Late Fee settings
+    if "late_fee_enabled" in data:
+        update_fields["late_fee_enabled"] = bool(data["late_fee_enabled"])
+    if "late_fee_grace_hours" in data:
+        update_fields["late_fee_grace_hours"] = max(1, int(data["late_fee_grace_hours"]))
+    if "late_fee_description" in data:
+        update_fields["late_fee_description"] = str(data["late_fee_description"]).strip() or "Recargo por demora en pago"
+    # Update shipping_categories with late_fee values
+    if "shipping_categories" in data:
+        update_fields["shipping_categories"] = data["shipping_categories"]
 
     if update_fields:
         await db.tenants.update_one({"id": tenant_id}, {"$set": update_fields})
@@ -6963,6 +6984,76 @@ async def list_annulled_invoices(current_user: dict = Depends(get_current_user))
     return invoices
 
 
+async def calculate_and_apply_late_fee(invoice: dict, tenant: dict, shipment: dict = None) -> dict:
+    """
+    Calculate and apply late fee to an invoice based on shipping category.
+    Returns updated invoice dict (does NOT persist to DB - caller should do that).
+    
+    Rules:
+    - Only applies if tenant has late_fee_enabled=True
+    - Only applies if invoice is not annulled
+    - Only applies if late_fee_applied is not already True
+    - Only applies after late_fee_grace_hours have passed since invoice creation
+    - Fee amount comes from the shipping_category's late_fee value
+    """
+    # Skip if already applied or annulled
+    if invoice.get("late_fee_applied") or invoice.get("is_annulled"):
+        return invoice
+    
+    # Skip if late fee not enabled for tenant
+    if not tenant.get("late_fee_enabled"):
+        return invoice
+    
+    # Check if grace period has passed
+    grace_hours = tenant.get("late_fee_grace_hours", 24)
+    created_at = invoice.get("created_at")
+    if not created_at:
+        return invoice
+    
+    try:
+        created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+        now = datetime.now(timezone.utc)
+        hours_since_creation = (now - created_dt).total_seconds() / 3600
+        
+        if hours_since_creation < grace_hours:
+            return invoice  # Grace period not yet passed
+    except Exception:
+        return invoice
+    
+    # Get shipping category from shipment
+    shipping_category = None
+    if shipment:
+        shipping_category = shipment.get("shipping_category")
+    
+    if not shipping_category:
+        return invoice  # No shipping category to base fee on
+    
+    # Find the late fee for this category
+    shipping_categories = tenant.get("shipping_categories", [])
+    late_fee_amount = 0
+    for cat in shipping_categories:
+        if cat.get("key") == shipping_category:
+            late_fee_amount = float(cat.get("late_fee", 0))
+            break
+    
+    if late_fee_amount <= 0:
+        return invoice  # No late fee configured for this category
+    
+    # Apply the late fee
+    now_iso = datetime.now(timezone.utc).isoformat()
+    invoice["late_fee_applied"] = True
+    invoice["late_fee_amount"] = round(late_fee_amount, 2)
+    invoice["late_fee_description"] = tenant.get("late_fee_description", "Recargo por demora en pago")
+    invoice["late_fee_applied_at"] = now_iso
+    invoice["late_fee_category"] = shipping_category
+    
+    # Update total to pay if it exists
+    if "total_a_pagar" in invoice:
+        invoice["total_a_pagar"] = round(invoice.get("total_a_pagar", 0) + late_fee_amount, 2)
+    
+    return invoice
+
+
 @api_router.get("/invoices/{invoice_id}")
 async def get_invoice_detail(invoice_id: str, current_user: dict = Depends(get_current_user)):
     """Get invoice with full details"""
@@ -7070,6 +7161,24 @@ async def get_invoice_detail(invoice_id: str, current_user: dict = Depends(get_c
         ]).to_list(1)
         total_saldo_pend = saldo_pend_agg[0]["total"] if saldo_pend_agg else 0
         real_client_balance = round(total_recharges - total_purchases - total_shipping, 2)
+
+    # Apply late fee if applicable (and persist if changed)
+    if tenant and not invoice.get("late_fee_applied") and not invoice.get("is_annulled"):
+        updated_invoice = await calculate_and_apply_late_fee(invoice, tenant, shipment)
+        if updated_invoice.get("late_fee_applied") and not invoice.get("late_fee_applied"):
+            # Persist the late fee to the database
+            await db.invoices.update_one(
+                {"id": invoice_id, "tenant_id": tid},
+                {"$set": {
+                    "late_fee_applied": updated_invoice["late_fee_applied"],
+                    "late_fee_amount": updated_invoice["late_fee_amount"],
+                    "late_fee_description": updated_invoice["late_fee_description"],
+                    "late_fee_applied_at": updated_invoice["late_fee_applied_at"],
+                    "late_fee_category": updated_invoice.get("late_fee_category"),
+                    "total_a_pagar": updated_invoice.get("total_a_pagar", invoice.get("total_a_pagar", 0))
+                }}
+            )
+            invoice = updated_invoice
 
     return {
         **invoice,

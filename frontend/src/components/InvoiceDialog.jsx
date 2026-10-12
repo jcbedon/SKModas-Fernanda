@@ -1375,7 +1375,8 @@ export default function InvoiceDialog({ open, onOpenChange, client, tenantInfo, 
                 const displaySubtotal = totalEtiqueta + totalCommission;
                 const taxes = currentInvoice.total_tax || 0;
                 const saldoPend = parseFloat(editSaldoPendiente) || 0;
-                const grandTotal = displaySubtotal + taxes + shippingCost + saldoPend;
+                const lateFee = currentInvoice.late_fee_applied ? (currentInvoice.late_fee_amount || 0) : 0;
+                const grandTotal = displaySubtotal + taxes + shippingCost + saldoPend + lateFee;
                 const appliedDeposits = currentInvoice.applied_deposits || [];
                 const depositsApplied = currentInvoice.deposits_applied || 0;
                 const saldoAFavorAnterior = currentInvoice.saldo_a_favor_anterior || 0;
@@ -1464,6 +1465,16 @@ export default function InvoiceDialog({ open, onOpenChange, client, tenantInfo, 
                             />
                           </div>
                         </div>
+                        {/* Late Fee / Recargo por Mora */}
+                        {currentInvoice.late_fee_applied && currentInvoice.late_fee_amount > 0 && (
+                          <div className="flex justify-between text-sm bg-amber-50 -mx-4 px-4 py-1.5 border-y border-amber-200">
+                            <span className="text-amber-700 font-medium flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {currentInvoice.late_fee_description || 'Recargo por mora'}:
+                            </span>
+                            <span className="font-bold text-amber-700">${currentInvoice.late_fee_amount.toFixed(2)}</span>
+                          </div>
+                        )}
                         {/* Divider before Total */}
                         <div className="border-t border-gray-300 pt-2 mt-2">
                           <div className="flex justify-between">

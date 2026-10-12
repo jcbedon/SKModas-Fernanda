@@ -263,7 +263,10 @@ export async function generateInvoicePDF(invoiceData, tenantInfo) {
   const saldoFavorAnterior = inv.saldo_a_favor_anterior || 0;
   const appliedDeposits = inv.applied_deposits || [];
   const depositsApplied = inv.deposits_applied || 0;
-  const grandTotal = displaySubtotal + totalCommission + taxes + shippingCost + saldoPend;
+  // Late Fee
+  const lateFee = inv.late_fee_applied ? (inv.late_fee_amount || 0) : 0;
+  const lateFeeDesc = inv.late_fee_description || "Recargo por mora";
+  const grandTotal = displaySubtotal + totalCommission + taxes + shippingCost + saldoPend + lateFee;
   const totalCreditsPreview = depositsApplied + saldoFavorAnterior;
   // IMPORTANT: Always compute `total_a_pagar` and `saldo_a_favor` locally from
   // authoritative components instead of trusting the backend-persisted values.
@@ -310,6 +313,14 @@ export async function generateInvoicePDF(invoiceData, tenantInfo) {
     doc.text(`$${shippingCost.toFixed(2)}`, pageWidth - margin, finalY, { align: "right" });
   }
   if (saldoPend > 0) { ensureSpace(7); finalY += 6; doc.setTextColor(194, 65, 12); doc.text("Saldo Pendiente:", totalsX, finalY); doc.text(`$${saldoPend.toFixed(2)}`, pageWidth - margin, finalY, { align: "right" }); }
+  // Late Fee
+  if (lateFee > 0) {
+    ensureSpace(7);
+    finalY += 6;
+    doc.setTextColor(180, 83, 9); // Amber color
+    doc.text(lateFeeDesc + ":", totalsX, finalY);
+    doc.text(`$${lateFee.toFixed(2)}`, pageWidth - margin, finalY, { align: "right" });
+  }
 
   finalY += 4;
   // Critical: "Total:" line must stay visible. If we're near the bottom, break now.
