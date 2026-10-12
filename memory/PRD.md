@@ -362,9 +362,22 @@ Nuevo módulo completo para gestión de productos de inventario propios del nego
 
 ### Testing
 - iteration_17.json: 14/14 backend tests PASS, 100% frontend flows PASS
+- iteration_18.json: 100% frontend tests PASS - Verificación de bugs visuales corregidos
 - Producto de prueba: "Camiseta Deportiva" SKU CAM-001, $15 costo, $29.99 venta, 8.25% tax, 48 Ecuador, 25 USA
+
+### Bug Fixes (12-oct-2026)
+- **Tarjetas Ecuador/USA reducidas**: Padding reducido de p-6 a p-3, banderas de h-20 a h-10, texto más compacto. Tamaño final ~216x132px (aproximadamente la mitad del original).
+- **Botones de diálogos corregidos**: Añadidas clases explícitas de color a todos los botones de acción en DialogFooter:
+  - Crear/Actualizar producto: `bg-blue-600 hover:bg-blue-700 text-white`
+  - Aplicar (ajuste stock): `bg-blue-600 hover:bg-blue-700 text-white`
+  - Registrar (venta): `bg-green-600 hover:bg-green-700 text-white`
+  - Transferir: `bg-purple-600 hover:bg-purple-700 text-white`
+  - Crear Compras para Facturar: `bg-green-600 hover:bg-green-700 text-white`
+  - Cerrar (alertas): `bg-slate-700 hover:bg-slate-800 text-white`
+- **Error de sintaxis corregido**: Removido `})}` duplicado en línea 1003 de AdminInventory.jsx
 
 ### Pendiente/Backlog
 - Hacer el umbral de stock bajo (<5) configurable por tenant
 - Permiso específico `manage_inventory` para empleados (actualmente hereda de admin)
+- Refactorizar AdminInventory.jsx (>1000 líneas) en componentes más pequeños por diálogo
 
