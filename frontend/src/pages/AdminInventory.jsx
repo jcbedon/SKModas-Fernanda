@@ -38,7 +38,11 @@ import {
   ArrowRightLeft,
   FileText,
   Bell,
-  Check
+  Check,
+  Sparkles,
+  Tag,
+  Percent,
+  Hash
 } from "lucide-react";
 
 const DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_compraenvivo/artifacts/qvyfsb43_WhatsApp%20Image%202026-02-03%20at%208.05.08%20PM.jpeg";
@@ -117,10 +121,12 @@ export default function AdminInventory() {
     cost: "",
     sale_price: "",
     tax_rate: "0",
-    stock: "0",
+    stock: "1",
     sku: "",
     description: ""
   });
+  const [taxOption, setTaxOption] = useState("sin"); // "sin", "7", "15", "otro"
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
   
   const [saleForm, setSaleForm] = useState({
     quantity: "1",
@@ -190,31 +196,60 @@ export default function AdminInventory() {
   // Product CRUD
   const openNewProduct = () => {
     setEditingProduct(null);
+    // Default tax: Ecuador = 15%, USA = Sin impuestos
+    const defaultTax = location === "ecuador" ? "15" : "sin";
+    setTaxOption(defaultTax);
     setProductForm({
       name: "",
       cost: "",
       sale_price: "",
-      tax_rate: "0",
-      stock: "0",
+      tax_rate: defaultTax === "sin" ? "0" : defaultTax,
+      stock: "1",
       sku: "",
       description: ""
     });
+    setShowNameSuggestions(false);
     setProductDialog(true);
   };
 
   const openEditProduct = (product) => {
     setEditingProduct(product);
+    const taxPercent = (product.tax_rate || 0) * 100;
+    // Determine tax option based on value
+    let option = "otro";
+    if (taxPercent === 0) option = "sin";
+    else if (taxPercent === 7) option = "7";
+    else if (taxPercent === 15) option = "15";
+    setTaxOption(option);
     setProductForm({
       name: product.name,
       cost: product.cost.toString(),
       sale_price: product.sale_price.toString(),
-      tax_rate: ((product.tax_rate || 0) * 100).toString(),
+      tax_rate: taxPercent.toString(),
       stock: (product.stock || 0).toString(),
       sku: product.sku || "",
       description: product.description || ""
     });
+    setShowNameSuggestions(false);
     setProductDialog(true);
   };
+
+  const handleTaxOptionChange = (option) => {
+    setTaxOption(option);
+    if (option === "sin") setProductForm({...productForm, tax_rate: "0"});
+    else if (option === "7") setProductForm({...productForm, tax_rate: "7"});
+    else if (option === "15") setProductForm({...productForm, tax_rate: "15"});
+    // "otro" keeps current value
+  };
+
+  // Get unique product names for suggestions
+  const existingProductNames = [...new Set(products.map(p => p.name))];
+  const filteredNameSuggestions = productForm.name.length > 0
+    ? existingProductNames.filter(name => 
+        name.toLowerCase().includes(productForm.name.toLowerCase()) && 
+        name.toLowerCase() !== productForm.name.toLowerCase()
+      )
+    : [];
 
   const handleSaveProduct = async () => {
     if (!productForm.name || !productForm.cost || !productForm.sale_price) {
@@ -735,45 +770,207 @@ export default function AdminInventory() {
         )}
       </div>
 
-      {/* Product Dialog */}
+      {/* Product Dialog - Animated & Enhanced */}
       <Dialog open={productDialog} onOpenChange={setProductDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingProduct ? "Editar Producto" : `Nuevo Producto ${config.name}`}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label>Nombre *</Label>
-              <Input value={productForm.name} onChange={(e) => setProductForm({...productForm, name: e.target.value})} data-testid="product-name-input" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Costo *</Label>
-                <Input type="number" step="0.01" value={productForm.cost} onChange={(e) => setProductForm({...productForm, cost: e.target.value})} data-testid="product-cost-input" />
+        <DialogContent className="max-w-md overflow-hidden border-0 shadow-2xl">
+          {/* Animated Header */}
+          <div className={`-mx-6 -mt-6 mb-4 p-5 bg-gradient-to-r ${location === 'ecuador' ? 'from-green-500 via-green-600 to-emerald-600' : 'from-blue-500 via-blue-600 to-indigo-600'} relative overflow-hidden`}>
+            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxjaXJjbGUgZmlsbD0iI2ZmZiIgZmlsbC1vcGFjaXR5PSIuMSIgY3g9IjIwIiBjeT0iMjAiIHI9IjIiLz48L2c+PC9zdmc+')] opacity-50"></div>
+            <div className="relative flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                {editingProduct ? <Edit2 className="h-6 w-6 text-white" /> : <Sparkles className="h-6 w-6 text-white animate-pulse" />}
               </div>
               <div>
-                <Label>Precio Venta *</Label>
-                <Input type="number" step="0.01" value={productForm.sale_price} onChange={(e) => setProductForm({...productForm, sale_price: e.target.value})} data-testid="product-price-input" />
+                <h2 className="text-xl font-bold text-white">
+                  {editingProduct ? "Editar Producto" : "Nuevo Producto"}
+                </h2>
+                <p className="text-white/80 text-sm flex items-center gap-1">
+                  <img src={config.flag} alt={config.name} className="h-4 inline-block" />
+                  Inventario {config.name}
+                </p>
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Impuesto (%)</Label>
-                <Input type="number" step="0.01" value={productForm.tax_rate} onChange={(e) => setProductForm({...productForm, tax_rate: e.target.value})} data-testid="product-tax-input" />
-              </div>
-              <div>
-                <Label>Stock</Label>
-                <Input type="number" value={productForm.stock} onChange={(e) => setProductForm({...productForm, stock: e.target.value})} data-testid="product-stock-input" />
-              </div>
-            </div>
-            <div>
-              <Label>SKU (opcional)</Label>
-              <Input value={productForm.sku} onChange={(e) => setProductForm({...productForm, sku: e.target.value})} data-testid="product-sku-input" />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setProductDialog(false)}>Cancelar</Button>
-            <Button onClick={handleSaveProduct} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="save-product-btn">{editingProduct ? "Actualizar" : "Crear"}</Button>
+
+          <div className="space-y-4 px-1">
+            {/* Product Name with Autocomplete */}
+            <div className="relative">
+              <Label className="flex items-center gap-2 text-slate-700 font-semibold mb-2">
+                <Tag className="h-4 w-4 text-slate-500" />
+                Nombre del Producto *
+              </Label>
+              <Input 
+                value={productForm.name} 
+                onChange={(e) => {
+                  setProductForm({...productForm, name: e.target.value});
+                  setShowNameSuggestions(true);
+                }}
+                onFocus={() => setShowNameSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
+                placeholder="Ej: Camiseta Nike Dri-FIT"
+                className="h-11 border-2 border-slate-200 focus:border-blue-400 transition-all"
+                data-testid="product-name-input" 
+              />
+              {/* Name suggestions dropdown */}
+              {showNameSuggestions && filteredNameSuggestions.length > 0 && (
+                <div className="absolute z-50 w-full mt-1 bg-white border-2 border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                  <div className="px-3 py-2 text-xs text-amber-600 bg-amber-50 border-b flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    Productos similares existentes:
+                  </div>
+                  {filteredNameSuggestions.slice(0, 5).map((name, idx) => (
+                    <div
+                      key={idx}
+                      className="px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm border-b last:border-b-0 flex items-center gap-2"
+                      onMouseDown={() => {
+                        setProductForm({...productForm, name});
+                        setShowNameSuggestions(false);
+                      }}
+                    >
+                      <Package className="h-4 w-4 text-slate-400" />
+                      {name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Cost and Sale Price */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-3 rounded-xl border border-slate-200">
+                <Label className="flex items-center gap-2 text-slate-600 text-xs font-semibold mb-2">
+                  <DollarSign className="h-3 w-3" />
+                  Costo *
+                </Label>
+                <Input 
+                  type="number" 
+                  step="0.01" 
+                  value={productForm.cost} 
+                  onChange={(e) => setProductForm({...productForm, cost: e.target.value})} 
+                  placeholder="0.00"
+                  className="h-10 text-lg font-semibold border-slate-300"
+                  data-testid="product-cost-input" 
+                />
+              </div>
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-3 rounded-xl border border-green-200">
+                <Label className="flex items-center gap-2 text-green-700 text-xs font-semibold mb-2">
+                  <DollarSign className="h-3 w-3" />
+                  Precio Venta *
+                </Label>
+                <Input 
+                  type="number" 
+                  step="0.01" 
+                  value={productForm.sale_price} 
+                  onChange={(e) => setProductForm({...productForm, sale_price: e.target.value})} 
+                  placeholder="0.00"
+                  className="h-10 text-lg font-semibold border-green-300 text-green-700"
+                  data-testid="product-price-input" 
+                />
+              </div>
+            </div>
+
+            {/* Tax Selector */}
+            <div className="bg-gradient-to-br from-purple-50 to-violet-50 p-4 rounded-xl border border-purple-200">
+              <Label className="flex items-center gap-2 text-purple-700 text-xs font-semibold mb-3">
+                <Percent className="h-3 w-3" />
+                Impuesto
+              </Label>
+              <div className="grid grid-cols-4 gap-2 mb-2">
+                {[
+                  { value: "sin", label: "Sin Tax", icon: "🚫" },
+                  { value: "7", label: "7%", icon: "📊" },
+                  { value: "15", label: "15%", icon: "📈" },
+                  { value: "otro", label: "Otro", icon: "✏️" }
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => handleTaxOptionChange(opt.value)}
+                    className={`p-2 rounded-lg text-center transition-all duration-200 transform hover:scale-105 ${
+                      taxOption === opt.value 
+                        ? 'bg-purple-600 text-white shadow-lg ring-2 ring-purple-300' 
+                        : 'bg-white text-slate-600 border border-slate-200 hover:border-purple-300'
+                    }`}
+                  >
+                    <span className="text-lg">{opt.icon}</span>
+                    <p className="text-xs font-semibold mt-1">{opt.label}</p>
+                  </button>
+                ))}
+              </div>
+              {taxOption === "otro" && (
+                <div className="mt-3 animate-in slide-in-from-top-2 duration-200">
+                  <Input 
+                    type="number" 
+                    step="0.01" 
+                    value={productForm.tax_rate} 
+                    onChange={(e) => setProductForm({...productForm, tax_rate: e.target.value})} 
+                    placeholder="Ingresa el porcentaje"
+                    className="h-10 border-purple-300 bg-white"
+                    data-testid="product-tax-input"
+                  />
+                  <p className="text-xs text-purple-500 mt-1">Ingresa el porcentaje de impuesto (ej: 12)</p>
+                </div>
+              )}
+              {taxOption !== "otro" && (
+                <p className="text-xs text-purple-500 mt-2">
+                  {taxOption === "sin" ? "Este producto no tendrá impuestos" : `Se aplicará ${taxOption}% de impuesto`}
+                </p>
+              )}
+            </div>
+
+            {/* Stock and SKU */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gradient-to-br from-blue-50 to-cyan-50 p-3 rounded-xl border border-blue-200">
+                <Label className="flex items-center gap-2 text-blue-700 text-xs font-semibold mb-2">
+                  <Boxes className="h-3 w-3" />
+                  Stock Inicial
+                </Label>
+                <Input 
+                  type="number" 
+                  value={productForm.stock} 
+                  onChange={(e) => setProductForm({...productForm, stock: e.target.value})} 
+                  placeholder="1"
+                  className="h-10 text-lg font-semibold border-blue-300 text-blue-700"
+                  data-testid="product-stock-input" 
+                />
+              </div>
+              <div>
+                <Label className="flex items-center gap-2 text-slate-600 text-xs font-semibold mb-2">
+                  <Hash className="h-3 w-3" />
+                  SKU (opcional)
+                </Label>
+                <Input 
+                  value={productForm.sku} 
+                  onChange={(e) => setProductForm({...productForm, sku: e.target.value})} 
+                  placeholder="ABC-123"
+                  className="h-10 border-slate-300"
+                  data-testid="product-sku-input" 
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-6 gap-2">
+            <Button variant="outline" onClick={() => setProductDialog(false)} className="px-6">
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleSaveProduct} 
+              className={`px-6 gap-2 ${location === 'ecuador' ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105`}
+              data-testid="save-product-btn"
+            >
+              {editingProduct ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Actualizar
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  Crear Producto
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

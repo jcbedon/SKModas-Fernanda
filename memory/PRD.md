@@ -376,6 +376,18 @@ Nuevo módulo completo para gestión de productos de inventario propios del nego
   - Cerrar (alertas): `bg-slate-700 hover:bg-slate-800 text-white`
 - **Error de sintaxis corregido**: Removido `})}` duplicado en línea 1003 de AdminInventory.jsx
 
+### Mejoras Diálogo Crear Producto (12-oct-2026)
+- **Selector de impuesto visual**: Botones con íconos para Sin Tax (🚫), 7% (📊), 15% (📈), Otro (✏️)
+- **Default de impuesto según ubicación**: Ecuador = 15%, USA = Sin Tax
+- **Autocompletado de nombres**: Muestra sugerencias de productos existentes con alerta de duplicados
+- **Stock por defecto = 1**: Ya no inicia en 0
+- **Diseño animado y moderno**:
+  - Header con gradiente según país (verde Ecuador, azul USA) y patrón de puntos
+  - Campos con fondos diferenciados por tipo (gris=costo, verde=precio, púrpura=impuesto, azul=stock)
+  - Iconos en cada sección (Tag, DollarSign, Percent, Boxes, Hash)
+  - Botón de guardar con animación hover y color según país
+  - Input de impuesto manual aparece con animación cuando se selecciona "Otro"
+
 ### Pendiente/Backlog
 - Hacer el umbral de stock bajo (<5) configurable por tenant
 - Permiso específico `manage_inventory` para empleados (actualmente hereda de admin)
