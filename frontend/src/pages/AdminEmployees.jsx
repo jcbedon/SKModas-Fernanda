@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { getEmployees, createEmployee, updateEmployee, deleteEmployee, getEmployeeDetail } from "@/lib/api";
 import { useRefreshOnTabFocus } from "@/hooks/useRefreshOnTabFocus";
 import { toast } from "sonner";
-import { Users, Plus, Edit, Trash2, Eye, EyeOff, Shield, UserCheck, UserX, ArrowLeft } from "lucide-react";
+import { Users, Plus, Edit, Trash2, Eye, EyeOff, Shield, UserCheck, UserX, ArrowLeft, User } from "lucide-react";
 
 const PERMISSION_GROUPS = [
   {
