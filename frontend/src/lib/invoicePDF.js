@@ -410,14 +410,14 @@ export async function generateInvoicePDF(invoiceData, tenantInfo) {
   // QR
   try {
     const tokenRes = await generateAccessToken({ customer_id: cli?.customer_id, invoice_id: inv.id });
-    const qr = await QRCode.toDataURL(`https://outletsusaec.shop/access/${tokenRes.data.token}`, { width: 200, margin: 1, color: { dark: "#0F172A", light: "#FFFFFF" } });
+    const qr = await QRCode.toDataURL(`https://didiershop.live/access/${tokenRes.data.token}`, { width: 200, margin: 1, color: { dark: "#0F172A", light: "#FFFFFF" } });
     doc.addImage(qr, "PNG", pageWidth - margin - 22, footerY - 6, 22, 22);
     doc.setFontSize(6);
     doc.setTextColor(...colors.textSecondary);
     doc.text("Escanea para ver tu portal", pageWidth - margin - 11, footerY + 18, { align: "center" });
   } catch (e) {
     try {
-      const qr = await QRCode.toDataURL(`https://outletsusaec.shop/login?user=${encodeURIComponent(cli?.customer_id || "")}`, { width: 200, margin: 1, color: { dark: "#0F172A", light: "#FFFFFF" } });
+      const qr = await QRCode.toDataURL(`https://didiershop.live/login?user=${encodeURIComponent(cli?.customer_id || "")}`, { width: 200, margin: 1, color: { dark: "#0F172A", light: "#FFFFFF" } });
       doc.addImage(qr, "PNG", pageWidth - margin - 22, footerY - 6, 22, 22);
     } catch (e2) { /* skip QR */ }
   }

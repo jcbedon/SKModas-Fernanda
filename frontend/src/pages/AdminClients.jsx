@@ -354,7 +354,7 @@ export default function AdminClients() {
 
   const getWhatsAppMessage = () => {
     if (!createdClientInfo) return "";
-    const storeName = tenantInfo?.business_name || "Outlets USA EC";
+    const storeName = tenantInfo?.business_name || "DidierShop";
     return `✅ *Bienvenido a ${storeName}*
 
 Tu cuenta fue creada:
@@ -362,7 +362,7 @@ Tu cuenta fue creada:
 🔑 Clave: *${createdClientInfo.password}*
 
 🔗 Ingresa aquí:
-https://outletsusaec.shop/`;
+https://didiershop.live/`;
   };
 
   const handleCopyMessage = () => {
