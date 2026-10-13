@@ -74,6 +74,7 @@ export default function AdminEmployees() {
   const [showPassword, setShowPassword] = useState({});
   const [formData, setFormData] = useState({
     name: "",
+    username: "",
     email: "",
     whatsapp: "",
     password: "",
@@ -104,6 +105,7 @@ export default function AdminEmployees() {
       setEditingEmployee(employee);
       setFormData({
         name: employee.name,
+        username: employee.username || "",
         email: employee.email,
         whatsapp: employee.whatsapp || "",
         password: employee.password_plain || "",
@@ -114,6 +116,7 @@ export default function AdminEmployees() {
       setEditingEmployee(null);
       setFormData({
         name: "",
+        username: "",
         email: "",
         whatsapp: "",
         password: "",
@@ -277,6 +280,14 @@ export default function AdminEmployees() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Username for login */}
+                <div className="flex items-center gap-2 bg-indigo-50 p-2 rounded-lg">
+                  <User className="h-4 w-4 text-indigo-500" />
+                  <span className="text-sm text-indigo-700">
+                    Login: <span className="font-mono font-semibold">{employee.username || employee.name}</span>
+                  </span>
+                </div>
+                
                 {employee.whatsapp && (
                   <p className="text-sm text-slate-600">WhatsApp: {employee.whatsapp}</p>
                 )}
@@ -375,6 +386,20 @@ export default function AdminEmployees() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label className="text-slate-700 font-medium">Usuario para login</Label>
+                  <Input
+                    value={formData.username}
+                    onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value.toLowerCase().replace(/\s/g, '_') }))}
+                    placeholder={formData.name ? formData.name.toLowerCase().replace(/\s/g, '_') : "usuario_ejemplo"}
+                    className="border-slate-300 focus:border-indigo-500 focus:ring-indigo-500"
+                    data-testid="employee-username-input"
+                  />
+                  <p className="text-xs text-slate-500">El empleado usará esto para iniciar sesión (o su nombre)</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
                   <Label className="text-slate-700 font-medium">Email *</Label>
                   <Input
                     type="email"
@@ -385,9 +410,6 @@ export default function AdminEmployees() {
                     data-testid="employee-email-input"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-slate-700 font-medium">WhatsApp</Label>
                   <Input
@@ -397,6 +419,9 @@ export default function AdminEmployees() {
                     className="border-slate-300 focus:border-indigo-500 focus:ring-indigo-500"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-slate-700 font-medium">Contraseña {!editingEmployee && "*"}</Label>
                   <div className="relative">

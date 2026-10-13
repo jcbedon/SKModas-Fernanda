@@ -525,6 +525,7 @@ class Employee(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     tenant_id: str
     name: str
+    username: Optional[str] = None  # Username for login (if not set, can login with name)
     email: str
     whatsapp: Optional[str] = None
     password_plain: str  # Stored in plain text so admin can view/change it
@@ -713,6 +714,7 @@ class AdminClientCreate(BaseModel):
 
 class EmployeeCreate(BaseModel):
     name: str
+    username: Optional[str] = None  # Username for login (optional, defaults to name)
     email: str
     whatsapp: Optional[str] = None
     password: str
@@ -720,6 +722,7 @@ class EmployeeCreate(BaseModel):
 
 class EmployeeUpdate(BaseModel):
     name: Optional[str] = None
+    username: Optional[str] = None
     email: Optional[str] = None
     whatsapp: Optional[str] = None
     password: Optional[str] = None
@@ -1324,11 +1327,16 @@ async def login_user(login_data: UserLogin):
         ]
     }, {"_id": 0}).to_list(10)
     
-    # 2. Search in employees collection
+    # 2. Search in employees collection (by email, whatsapp, username, or name)
     employee = await db.employees.find_one({
         "$or": [
             {"email": identifier},
-            {"whatsapp": identifier}
+            {"email": identifier_lower},
+            {"whatsapp": identifier},
+            {"username": identifier},
+            {"username": identifier_lower},
+            {"name": identifier},
+            {"name": {"$regex": f"^{identifier}$", "$options": "i"}}  # Case-insensitive name match
         ]
     }, {"_id": 0})
     
@@ -9413,12 +9421,21 @@ async def create_employee(data: EmployeeCreate, current_user: dict = Depends(get
     if existing_user:
         raise HTTPException(status_code=400, detail="Ya existe un usuario con este email")
     
+    # Generate username from name if not provided
+    username = data.username.strip() if data.username else data.name.lower().replace(" ", "_")
+    
+    # Check if username already exists
+    existing_username = await db.employees.find_one({"username": username, "tenant_id": tid}, {"_id": 0})
+    if existing_username:
+        raise HTTPException(status_code=400, detail="Ya existe un empleado con este nombre de usuario")
+    
     # Create permissions object
     permissions = EmployeePermissions(**data.permissions)
     
     employee = Employee(
         tenant_id=tid,
         name=data.name,
+        username=username,
         email=data.email,
         whatsapp=data.whatsapp,
         password_plain=data.password,  # Store plain text for admin viewing
@@ -9443,10 +9460,10 @@ async def create_employee(data: EmployeeCreate, current_user: dict = Depends(get
         entity_type="employee",
         entity_id=employee.id,
         entity_name=data.name,
-        details={"email": data.email, "permissions": data.permissions}
+        details={"email": data.email, "username": username, "permissions": data.permissions}
     )
     
-    return {"message": "Empleado creado exitosamente", "employee_id": employee.id}
+    return {"message": "Empleado creado exitosamente", "employee_id": employee.id, "username": username}
 
 @api_router.get("/admin/employees/{employee_id}")
 async def get_employee(employee_id: str, current_user: dict = Depends(get_current_user)):
