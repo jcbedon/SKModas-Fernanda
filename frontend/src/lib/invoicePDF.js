@@ -175,10 +175,19 @@ export async function generateInvoicePDF(invoiceData, tenantInfo) {
 
   currentY += 12;
 
-  // Products table
-  const tableData = (inv.purchases || []).map((p) => [
-    "1", p.item_name, `$${p.price.toFixed(2)}`, p.store || "", `$${(p.commission || 0).toFixed(2)}`, `$${(p.price + (p.commission || 0)).toFixed(2)}`,
-  ]);
+  // Products table - For pacas, show total as price and hide commission
+  const tableData = (inv.purchases || []).map((p) => {
+    const isPaca = p.entry_source === "paca" || p.store === "Pacas";
+    const total = p.price + (p.commission || 0);
+    return [
+      "1", 
+      p.item_name, 
+      isPaca ? `$${total.toFixed(2)}` : `$${p.price.toFixed(2)}`, 
+      p.store || "", 
+      isPaca ? "—" : `$${(p.commission || 0).toFixed(2)}`, 
+      `$${total.toFixed(2)}`,
+    ];
+  });
 
   autoTable(doc, {
     startY: currentY,
