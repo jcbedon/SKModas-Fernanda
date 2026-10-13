@@ -54,7 +54,7 @@ export default function AdminLiveModule() {
   const [creating, setCreating] = useState(false);
 
   // Product form
-  const [product, setProduct] = useState({ item_name: "", price: "", commission: "", quantity: 1 });
+  const [product, setProduct] = useState({ item_name: "", price: "", commission: "" });
   const [history, setHistory] = useState([]);
 
   // Clients
@@ -193,7 +193,7 @@ export default function AdminLiveModule() {
       clientSearchRef.current?.focus();
       return;
     }
-    // optimistic add, then enrich with owes info
+    // optimistic add with quantity=1, then enrich with owes info
     const base = {
       customer_id: client.customer_id,
       name: client.name,
@@ -201,6 +201,7 @@ export default function AdminLiveModule() {
       pending_to_invoice: 0,
       owes: false,
       loading: true,
+      quantity: 1, // Default quantity per client
     };
     setSelectedClients(prev => [base, ...prev]);
     setClientQuery("");
@@ -217,6 +218,13 @@ export default function AdminLiveModule() {
     }
   };
 
+  const updateClientQuantity = (customerId, quantity) => {
+    const qty = Math.max(1, parseInt(quantity) || 1);
+    setSelectedClients(prev => prev.map(c => 
+      c.customer_id === customerId ? { ...c, quantity: qty } : c
+    ));
+  };
+
   const handleClientKeyDown = (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -231,9 +239,10 @@ export default function AdminLiveModule() {
 
   const priceNum = parseFloat(product.price) || 0;
   const commissionNum = product.commission === "" ? 0 : (parseFloat(product.commission) || 0);
-  const quantityNum = parseInt(product.quantity) || 1;
   const unitValue = priceNum + commissionNum;
-  const finalValue = unitValue * quantityNum;
+  // Calculate total based on each client's quantity
+  const totalQuantity = selectedClients.reduce((sum, c) => sum + (c.quantity || 1), 0);
+  const finalValue = unitValue * totalQuantity;
 
   const handleRegister = async () => {
     if (!selectedLive) { toast.error("Selecciona o crea un Live"); return; }
@@ -248,8 +257,9 @@ export default function AdminLiveModule() {
         store: selectedLive.store || "",
         price: priceNum,
         commission_amount: product.commission === "" ? null : commissionNum,
+        // Send customer_ids with their quantities
         customer_ids: selectedClients.map(c => c.customer_id),
-        quantity: parseInt(product.quantity) || 1,
+        quantities: selectedClients.map(c => c.quantity || 1), // Array of quantities matching customer_ids order
       });
       const created = res.data?.created?.length || 0;
       const failed = res.data?.failed || [];
@@ -258,7 +268,7 @@ export default function AdminLiveModule() {
         toast.error(`${failed.length} no se registraron: ${failed.map(f => f.customer_id).join(", ")}`);
       }
       // Reset product + clients, keep live
-      setProduct({ item_name: "", price: "", commission: "", quantity: 1 });
+      setProduct({ item_name: "", price: "", commission: "" });
       setSelectedClients([]);
       refreshHistory();
       loadLives();
@@ -533,14 +543,9 @@ export default function AdminLiveModule() {
                       <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                       <Input ref={priceRef} type="number" step="0.01" value={product.price}
                         onChange={e => setProduct({ ...product, price: e.target.value })}
+                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); clientSearchRef.current?.focus(); } }}
                         placeholder="0.00" className="h-11 rounded-lg pl-8" data-testid="live-product-price" />
                     </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs">Cant.</Label>
-                    <Input type="number" min="1" value={product.quantity}
-                      onChange={e => setProduct({ ...product, quantity: Math.max(1, parseInt(e.target.value) || 1) })}
-                      placeholder="1" className="h-11 rounded-lg text-center font-bold mt-1" data-testid="live-product-quantity" />
                   </div>
                   <div>
                     <Label className="text-xs">Comisión</Label>
@@ -553,10 +558,8 @@ export default function AdminLiveModule() {
                     </div>
                   </div>
                   <div className="rounded-lg bg-slate-900 text-white px-3 py-2 text-center" data-testid="live-final-value">
-                    <p className="text-[10px] opacity-70 leading-tight">
-                      {quantityNum > 1 ? `${quantityNum}x ${formatMoney(unitValue)}` : 'Valor final'}
-                    </p>
-                    <p className="text-lg font-bold leading-tight">{formatMoney(finalValue)}</p>
+                    <p className="text-[10px] opacity-70 leading-tight">Valor unitario</p>
+                    <p className="text-lg font-bold leading-tight">{formatMoney(unitValue)}</p>
                   </div>
                 </div>
               </CardContent>
@@ -610,12 +613,13 @@ export default function AdminLiveModule() {
                     const totalDeposits = Number(c.wallet_balance || 0) + Number(c.pending_to_invoice || 0);
                     const totalPurchases = Number(c.pending_to_invoice || 0);
                     const calculatedOwes = totalPurchases;
+                    const clientTotal = unitValue * (c.quantity || 1);
                     
                     return (
                     <div key={c.customer_id}
                       className={`flex items-center justify-between p-3 rounded-xl border ${c.owes ? "border-red-200 bg-red-50/50" : "border-slate-200"}`}
                       data-testid={`live-client-chip-${c.customer_id}`}>
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         <span className="text-[11px] font-bold text-rose-600 shrink-0">{c.customer_id}</span>
                         <span className="font-medium text-slate-800 truncate">{c.name}</span>
                         {c.loading ? (
@@ -630,8 +634,28 @@ export default function AdminLiveModule() {
                           </Badge>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-xs text-slate-500">Saldo {formatMoney(c.wallet_balance)}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* Quantity input per client */}
+                        <div className="flex items-center gap-1 bg-slate-100 rounded-lg px-1">
+                          <button 
+                            onClick={() => updateClientQuantity(c.customer_id, (c.quantity || 1) - 1)}
+                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-slate-700 font-bold"
+                            disabled={(c.quantity || 1) <= 1}
+                          >−</button>
+                          <Input 
+                            type="number" 
+                            min="1" 
+                            value={c.quantity || 1}
+                            onChange={e => updateClientQuantity(c.customer_id, e.target.value)}
+                            className="w-10 h-7 text-center font-bold text-sm border-0 bg-transparent p-0"
+                            data-testid={`live-client-qty-${c.customer_id}`}
+                          />
+                          <button 
+                            onClick={() => updateClientQuantity(c.customer_id, (c.quantity || 1) + 1)}
+                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-slate-700 font-bold"
+                          >+</button>
+                        </div>
+                        <span className="text-xs text-slate-600 font-semibold w-16 text-right">{formatMoney(clientTotal)}</span>
                         <button onClick={() => removeClient(c.customer_id)} className="text-slate-400 hover:text-rose-600" data-testid={`live-client-remove-${c.customer_id}`}>
                           <X className="h-4 w-4" />
                         </button>
@@ -647,7 +671,7 @@ export default function AdminLiveModule() {
                   data-testid="live-register-btn"
                 >
                   {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : (
-                    <>Registrar {quantityNum > 1 ? `${quantityNum}x ` : ''}en {selectedClients.length} cliente(s) · {formatMoney(finalValue * selectedClients.length)}</>
+                    <>Registrar {totalQuantity > selectedClients.length ? `${totalQuantity} unidades` : ''} en {selectedClients.length} cliente(s) · {formatMoney(finalValue)}</>
                   )}
                 </Button>
               </CardContent>

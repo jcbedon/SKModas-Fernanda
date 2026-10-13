@@ -666,7 +666,7 @@ class LiveModulePurchaseCreate(BaseModel):
     price: float
     commission_amount: Optional[float] = None  # empty => no commission
     customer_ids: List[str]
-    quantity: int = 1  # Number of items per client (default 1)
+    quantities: Optional[List[int]] = None  # Quantity per client (matches customer_ids order)
 
 class ShipmentCreate(BaseModel):
     user_id: str
@@ -5315,12 +5315,19 @@ async def create_live_module_purchases(data: LiveModulePurchaseCreate, current_u
     failed = []
     agg_sales = 0.0
     agg_comm = 0.0
-    quantity = max(1, data.quantity)  # Ensure at least 1
+    total_items_created = 0
     
-    for raw_cid in data.customer_ids:
+    # Build quantities list - default to 1 for each client if not provided
+    quantities = data.quantities or [1] * len(data.customer_ids)
+    # Ensure quantities list matches customer_ids length
+    while len(quantities) < len(data.customer_ids):
+        quantities.append(1)
+    
+    for idx, raw_cid in enumerate(data.customer_ids):
         cid = (raw_cid or "").upper().strip()
         if not cid:
             continue
+        quantity = max(1, quantities[idx])  # Get quantity for this specific client
         user = await db.users.find_one({"customer_id": cid, "tenant_id": tid}, {"_id": 0})
         if not user:
             failed.append({"customer_id": cid, "reason": "Cliente no encontrado"})
@@ -5355,6 +5362,7 @@ async def create_live_module_purchases(data: LiveModulePurchaseCreate, current_u
             await db.purchases.insert_one(purchase_dict)
             agg_sales += price_with_tax
             agg_comm += commission_fee
+            total_items_created += 1
         
         # Update wallet once with total for all items
         total_for_client = total * quantity
@@ -5371,9 +5379,8 @@ async def create_live_module_purchases(data: LiveModulePurchaseCreate, current_u
         created.append({"customer_id": cid, "name": user.get("name"), "new_balance": round(new_balance, 2), "quantity": quantity})
 
     if created:
-        total_items = len(created) * quantity
         await db.lives.update_one({"id": data.live_id, "tenant_id": tid},
-            {"$inc": {"total_sales": round(agg_sales, 2), "total_commissions": round(agg_comm, 2), "purchase_count": total_items}})
+            {"$inc": {"total_sales": round(agg_sales, 2), "total_commissions": round(agg_comm, 2), "purchase_count": total_items_created}})
         # Save product name to history for autocomplete (name only).
         name_clean = data.item_name.strip()
         if name_clean:
