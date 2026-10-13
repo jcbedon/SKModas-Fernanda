@@ -851,7 +851,11 @@ export default function InvoiceDialog({ open, onOpenChange, client, tenantInfo, 
                               <div className="flex items-center justify-between gap-2">
                                 <p className="font-medium text-gray-800 truncate">{purchase.item_name}</p>
                                 <div className="flex items-center gap-2 shrink-0">
-                                  <p className="font-bold text-lg" style={{ color: '#1E3A5F' }}>${(purchase.price + (purchase.commission || 0)).toFixed(2)}</p>
+                                  <p className="font-bold text-lg" style={{ color: '#1E3A5F' }}>
+                                    ${(purchase.entry_source === "paca" || purchase.store === "Pacas" 
+                                      ? purchase.price 
+                                      : purchase.price + (purchase.commission || 0)).toFixed(2)}
+                                  </p>
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -867,7 +871,7 @@ export default function InvoiceDialog({ open, onOpenChange, client, tenantInfo, 
                               <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
                                 <span>{purchase.store}</span>
                                 <span>Costo: ${purchase.price.toFixed(2)}</span>
-                                {purchase.commission > 0 && <span>Com: ${purchase.commission.toFixed(2)}</span>}
+                                {purchase.commission > 0 && purchase.entry_source !== "paca" && purchase.store !== "Pacas" && <span>Com: ${purchase.commission.toFixed(2)}</span>}
                               </div>
                               <div className="flex items-center gap-2 mt-1 text-xs">
                                 <span className="text-gray-400">
@@ -1327,8 +1331,12 @@ export default function InvoiceDialog({ open, onOpenChange, client, tenantInfo, 
                           <td className="p-3 text-sm font-medium">{p.item_name}</td>
                           <td className="p-3 text-sm text-right">${p.price.toFixed(2)}</td>
                           <td className="p-3 text-sm text-gray-600">{p.store}</td>
-                          <td className="p-3 text-sm text-right">${(p.commission || 0).toFixed(2)}</td>
-                          <td className="p-3 text-sm text-right font-bold">${(p.price + (p.commission || 0)).toFixed(2)}</td>
+                          <td className="p-3 text-sm text-right">
+                            {p.entry_source !== "paca" && p.store !== "Pacas" ? `$${(p.commission || 0).toFixed(2)}` : "—"}
+                          </td>
+                          <td className="p-3 text-sm text-right font-bold">
+                            ${(p.entry_source === "paca" || p.store === "Pacas" ? p.price : p.price + (p.commission || 0)).toFixed(2)}
+                          </td>
                           <td className="p-3 text-center">
                             <div className="flex items-center gap-1 justify-center">
                               {canEdit && (

@@ -411,7 +411,7 @@ export default function AdminInventory() {
 
   const updateInvoiceItemQty = (productId, qty) => {
     setInvoiceItems(invoiceItems.map(i => 
-      i.product_id === productId ? { ...i, quantity: Math.max(1, Math.min(qty, i.stock)) } : i
+      i.product_id === productId ? { ...i, quantity: Math.max(1, qty) } : i
     ));
   };
 
@@ -689,15 +689,6 @@ export default function AdminInventory() {
                                 data-testid={`transfer-${product.id}`}
                               >
                                 <ArrowRightLeft className="h-4 w-4 text-purple-600" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => openSaleDialog(product)}
-                                title="Registrar venta"
-                                data-testid={`sell-${product.id}`}
-                              >
-                                <ShoppingCart className="h-4 w-4 text-green-600" />
                               </Button>
                               <Button
                                 size="sm"
@@ -1165,7 +1156,7 @@ export default function AdminInventory() {
                   return (
                     <div
                       key={product.id}
-                      className={`p-3 border-b last:border-b-0 ${isSelected ? 'bg-green-50' : 'hover:bg-gray-50'}`}
+                      className={`p-3 border-b last:border-b-0 transition-colors ${isSelected ? 'bg-green-100 border-l-4 border-l-green-500' : 'hover:bg-gray-50'}`}
                     >
                       <div className="flex items-center gap-3">
                         <Checkbox
@@ -1186,7 +1177,6 @@ export default function AdminInventory() {
                             <Input
                               type="number"
                               min="1"
-                              max={product.stock}
                               value={isSelected.quantity}
                               onChange={(e) => updateInvoiceItemQty(product.id, parseInt(e.target.value) || 1)}
                               className="w-16 h-8 text-center"
