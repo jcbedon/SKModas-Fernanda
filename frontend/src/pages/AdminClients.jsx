@@ -448,7 +448,15 @@ https://didiershop.live/`;
               <><RefreshCw className="h-4 w-4 mr-2" />Recalcular Todos</>
             )}
           </Button>
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+          <Dialog open={createDialogOpen} onOpenChange={(open) => {
+            if (open) {
+              // Reset form when opening dialog
+              setNewClient({ name: "", country: "", whatsapp: "", email: "", password: "", commission_fee: 0, initial_balance: 0, custom_customer_id: "" });
+              setDuplicateWarning(null);
+              setShowPassword(false);
+            }
+            setCreateDialogOpen(open);
+          }}>
             <DialogTrigger asChild>
               <Button className="rounded-xl" data-testid="open-create-client-btn" style={{ background: '#1E3A5F', color: 'white' }}>
                 <UserPlus className="h-4 w-4 mr-2" /> Crear Cliente
@@ -510,6 +518,7 @@ https://didiershop.live/`;
                     value={newClient.email} 
                     onChange={(e) => setNew("email", e.target.value)} 
                     onBlur={checkForDuplicates}
+                    autoComplete="off"
                   />
                   <p className="text-xs text-gray-500 mt-1">Puedes dejarlo vacío si no lo tienes</p>
                 </div>
@@ -546,7 +555,8 @@ https://didiershop.live/`;
                       placeholder="Dejar vacío si no deseas asignar" 
                       className="rounded-xl pr-10 bg-white"
                       value={newClient.password} 
-                      onChange={(e) => setNew("password", e.target.value)} 
+                      onChange={(e) => setNew("password", e.target.value)}
+                      autoComplete="new-password"
                     />
                     <button
                       type="button"
