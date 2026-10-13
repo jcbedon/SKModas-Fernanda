@@ -107,11 +107,23 @@ export default function AdminInvoices() {
           setSelectedClientForInvoice(null);
           setInvoiceDialogOpen(true);
         } else if (customerId) {
-          // Find the client in the loaded clients list, then trigger the same flow
-          // the manual selector uses (loads tenant info + opens dialog with pending purchases).
+          // Load clients first if not already loaded
+          let clientsList = clients;
+          if (clientsList.length === 0) {
+            setLoadingClients(true);
+            try {
+              const res = await getAllClients();
+              clientsList = res.data;
+              setClients(clientsList);
+            } finally {
+              setLoadingClients(false);
+            }
+          }
+          
+          // Find the client and trigger the invoice flow
           const upper = customerId.toUpperCase();
-          const c = clients.find(x => (x.customer_id || "").toUpperCase() === upper);
-          if (c) {
+          const c = clientsList.find(x => (x.customer_id || "").toUpperCase() === upper);
+          if (c && !cancelled) {
             await handleSelectClientForInvoice(c);
           }
         }
@@ -121,7 +133,7 @@ export default function AdminInvoices() {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams.get("invoice_id"), searchParams.get("customer_id"), clients.length]);
+  }, [searchParams.get("invoice_id"), searchParams.get("customer_id")]);
 
   const loadInvoices = async (query = searchQuery) => {
     try {

@@ -24,6 +24,7 @@ import {
   UserPlus,
   Check,
   Sparkles,
+  FileText,
 } from "lucide-react";
 import {
   getPacas,
@@ -469,9 +470,20 @@ export default function AdminPacas() {
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-slate-800">{formatMoney(sale.sale_price)}</p>
-                        <p className="text-xs text-green-600">+{formatMoney(sale.commission)}</p>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="font-bold text-slate-800">{formatMoney(sale.sale_price)}</p>
+                          <p className="text-xs text-green-600">+{formatMoney(sale.commission)}</p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => navigate(`/admin/invoices?customer_id=${sale.customer_id}&create=true`)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                          data-testid={`invoice-sale-${sale.id}`}
+                        >
+                          <FileText className="h-4 w-4 mr-1" />
+                          Facturar
+                        </Button>
                       </div>
                     </div>
                   ))}
