@@ -248,6 +248,7 @@ export default function AdminLiveModule() {
     if (!selectedLive) { toast.error("Selecciona o crea un Live"); return; }
     if (!product.item_name.trim()) { toast.error("Ingresa el nombre del producto"); return; }
     if (priceNum <= 0) { toast.error("Ingresa un precio válido"); return; }
+    if (product.commission === "" || commissionNum < 0) { toast.error("Ingresa la comisión"); return; }
     if (selectedClients.length === 0) { toast.error("Agrega al menos un cliente"); return; }
     setSubmitting(true);
     try {
@@ -256,7 +257,7 @@ export default function AdminLiveModule() {
         item_name: product.item_name.trim(),
         store: selectedLive.store || "",
         price: priceNum,
-        commission_amount: product.commission === "" ? null : commissionNum,
+        commission_amount: commissionNum,
         // Send customer_ids with their quantities
         customer_ids: selectedClients.map(c => c.customer_id),
         quantities: selectedClients.map(c => c.quantity || 1), // Array of quantities matching customer_ids order
@@ -548,13 +549,13 @@ export default function AdminLiveModule() {
                     </div>
                   </div>
                   <div>
-                    <Label className="text-xs">Comisión</Label>
+                    <Label className="text-xs">Comisión *</Label>
                     <div className="relative mt-1">
                       <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                       <Input type="number" step="0.01" value={product.commission}
                         onChange={e => setProduct({ ...product, commission: e.target.value })}
                         onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); clientSearchRef.current?.focus(); } }}
-                        placeholder="(vacía)" className="h-11 rounded-lg pl-8" data-testid="live-product-commission" />
+                        placeholder="0.00" className={`h-11 rounded-lg pl-8 ${product.commission === "" ? "border-red-300 focus:border-red-400" : ""}`} data-testid="live-product-commission" />
                     </div>
                   </div>
                   <div className="rounded-lg bg-slate-900 text-white px-3 py-2 text-center" data-testid="live-final-value">
@@ -666,7 +667,7 @@ export default function AdminLiveModule() {
 
                 <Button
                   onClick={handleRegister}
-                  disabled={submitting || selectedClients.length === 0 || !product.item_name.trim() || priceNum <= 0}
+                  disabled={submitting || selectedClients.length === 0 || !product.item_name.trim() || priceNum <= 0 || product.commission === ""}
                   className="w-full h-12 rounded-xl bg-[#B84A5E] hover:bg-[#A33F52] text-white font-bold text-base"
                   data-testid="live-register-btn"
                 >
