@@ -852,9 +852,7 @@ export default function InvoiceDialog({ open, onOpenChange, client, tenantInfo, 
                                 <p className="font-medium text-gray-800 truncate">{purchase.item_name}</p>
                                 <div className="flex items-center gap-2 shrink-0">
                                   <p className="font-bold text-lg" style={{ color: '#1E3A5F' }}>
-                                    ${(purchase.entry_source === "paca" || purchase.store === "Pacas" 
-                                      ? purchase.price 
-                                      : purchase.price + (purchase.commission || 0)).toFixed(2)}
+                                    ${(purchase.price + (purchase.commission || 0)).toFixed(2)}
                                   </p>
                                   <Button
                                     variant="ghost"
@@ -1335,7 +1333,7 @@ export default function InvoiceDialog({ open, onOpenChange, client, tenantInfo, 
                             {p.entry_source !== "paca" && p.store !== "Pacas" ? `$${(p.commission || 0).toFixed(2)}` : "—"}
                           </td>
                           <td className="p-3 text-sm text-right font-bold">
-                            ${(p.entry_source === "paca" || p.store === "Pacas" ? p.price : p.price + (p.commission || 0)).toFixed(2)}
+                            ${(p.price + (p.commission || 0)).toFixed(2)}
                           </td>
                           <td className="p-3 text-center">
                             <div className="flex items-center gap-1 justify-center">
