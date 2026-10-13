@@ -11544,6 +11544,65 @@ async def delete_paca(paca_id: str, user=Depends(get_current_user)):
     return {"message": "Paca eliminada"}
 
 
+# ==================== ADMIN DATABASE CLEANUP ====================
+@api_router.post("/admin/cleanup-database")
+async def cleanup_database(user=Depends(get_current_user)):
+    """Clean all data except employees and tenants - ADMIN ONLY"""
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden limpiar la base de datos")
+    
+    tenant_id = user["tenant_id"]
+    
+    collections_to_clean = [
+        "users",           # Clientes
+        "invoices",        # Facturas
+        "purchases",       # Compras
+        "products",        # Productos de inventario
+        "inventory_movements",  # Movimientos de inventario
+        "pacas",           # Pacas
+        "paca_sales",      # Ventas de pacas
+        "wallets",         # Wallets
+        "wallet_transactions",  # Transacciones de wallet
+        "shipments",       # Envíos
+        "lives",           # Lives
+        "live_purchases",  # Compras de live
+        "referrals",       # Referidos
+        "audit_logs",      # Logs de auditoría
+        "bank_deposits",   # Depósitos bancarios
+    ]
+    
+    results = {}
+    total_deleted = 0
+    
+    for collection_name in collections_to_clean:
+        try:
+            collection = db[collection_name]
+            result = await collection.delete_many({"tenant_id": tenant_id})
+            results[collection_name] = result.deleted_count
+            total_deleted += result.deleted_count
+        except Exception as e:
+            results[collection_name] = f"Error: {str(e)}"
+    
+    # Log the cleanup action
+    await log_audit_action(
+        tenant_id=tenant_id,
+        user_id=user["user_id"],
+        user_name=user.get("name", "Admin"),
+        user_role=user["role"],
+        action="database_cleanup",
+        entity_type="system",
+        entity_id="cleanup",
+        entity_name="Database Cleanup",
+        details={"collections_cleaned": list(collections_to_clean), "total_deleted": total_deleted}
+    )
+    
+    return {
+        "message": "Base de datos limpiada exitosamente",
+        "total_deleted": total_deleted,
+        "details": results
+    }
+
+
 app.include_router(api_router)
 
 class NoCacheMiddleware(BaseHTTPMiddleware):
