@@ -145,8 +145,12 @@ const AuthProvider = ({ children }) => {
     }
   };
 
+  // Computed property: should financial values be hidden?
+  // Only applies to employees with hide_financial_values permission
+  const hideFinancials = user?.role === "employee" && user?.permissions?.hide_financial_values === true;
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, updateTenantLogo }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, updateTenantLogo, hideFinancials }}>
       {children}
     </AuthContext.Provider>
   );

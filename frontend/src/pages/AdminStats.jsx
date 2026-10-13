@@ -15,12 +15,21 @@ import StoreProfitsReport from "@/components/StoreProfitsReport";
 import ClientReportGenerator from "@/components/ClientReportGenerator";
 import { useRefreshOnTabFocus } from "@/hooks/useRefreshOnTabFocus";
 
-function formatMoney(n) {
-  return "$" + (n || 0).toFixed(2);
-}
+const DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_compraenvivo/artifacts/qvyfsb43_WhatsApp%20Image%202026-02-03%20at%208.05.08%20PM.jpeg";
 
-function ListItem({ rank, name, count, sales, commission, color }) {
-  return (
+export default function AdminStats() {
+  const navigate = useNavigate();
+  const { user, hideFinancials } = useAuth();
+  const logoUrl = user?.tenant_logo || DEFAULT_LOGO;
+  
+  // Format money - respects hideFinancials permission
+  const formatMoney = (n) => {
+    if (hideFinancials) return "••••";
+    return "$" + (n || 0).toFixed(2);
+  };
+  
+  // ListItem component for ranking lists
+  const ListItem = ({ rank, name, count, sales, commission, color }) => (
     <div className="flex items-center justify-between py-2 border-b last:border-0">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm" style={{ background: color }}>
@@ -37,14 +46,7 @@ function ListItem({ rank, name, count, sales, commission, color }) {
       </div>
     </div>
   );
-}
-
-const DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_compraenvivo/artifacts/qvyfsb43_WhatsApp%20Image%202026-02-03%20at%208.05.08%20PM.jpeg";
-
-export default function AdminStats() {
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const logoUrl = user?.tenant_logo || DEFAULT_LOGO;
+  
   // Permission helpers. Admins always see everything. For employees we honor
   // the granular keys; the legacy `view_statistics` toggle acts as a master
   // that auto-grants any sub-permission that hasn't been explicitly set

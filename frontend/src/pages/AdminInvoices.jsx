@@ -37,8 +37,14 @@ const DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_compraenvivo
 export default function AdminInvoices() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
+  const { user, hideFinancials } = useAuth();
   const logoUrl = user?.tenant_logo || DEFAULT_LOGO;
+  
+  // Format money with hideFinancials support
+  const formatMoney = (v) => {
+    if (hideFinancials) return "••••";
+    return "$" + Number(v || 0).toFixed(2);
+  };
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("active"); // active, annulled, all
@@ -327,7 +333,7 @@ export default function AdminInvoices() {
               <div>
                 <h2 className="text-white font-bold text-lg">Gestión de Facturas</h2>
                 <p className="text-white/70 text-sm">
-                  {invoices.filter(i => !i.is_annulled).length} facturas activas | ${invoices.filter(i => !i.is_annulled).reduce((sum, i) => sum + (i.total || 0), 0).toFixed(2)} total
+                  {invoices.filter(i => !i.is_annulled).length} facturas activas | {formatMoney(invoices.filter(i => !i.is_annulled).reduce((sum, i) => sum + (i.total || 0), 0))} total
                 </p>
               </div>
             </div>
@@ -512,7 +518,7 @@ export default function AdminInvoices() {
                           </span>
                           <Badge variant="outline" className="text-[10px] h-4 px-1.5">{wInvs.length}</Badge>
                         </div>
-                        <span className="text-xs font-bold text-slate-600">${total.toFixed(2)}</span>
+                        <span className="text-xs font-bold text-slate-600">{formatMoney(total)}</span>
                       </button>
                       {isExpanded && (
                         <div className="space-y-2 mb-4">
@@ -598,16 +604,16 @@ export default function AdminInvoices() {
                       return (
                         <>
                           <p className={`font-extrabold text-xl ${invoice.is_annulled ? "text-red-600 line-through" : ""}`} style={{ color: invoice.is_annulled ? undefined : '#1E3A5F' }} data-testid={`invoice-total-a-pagar-${invoice.id}`}>
-                            ${totalAPagar.toFixed(2)}
+                            {formatMoney(totalAPagar)}
                           </p>
-                          {showBoth && (
+                          {showBoth && !hideFinancials && (
                             <p
                               className="text-[10px] text-gray-500 leading-tight"
-                              title={`Items: $${displaySubtotal.toFixed(2)} · Taxes: $${taxes.toFixed(2)} · Envío: $${shippingCost.toFixed(2)} · Saldo pend.: $${saldoPend.toFixed(2)} · Depósitos: -$${depositsApp.toFixed(2)} · Saldo favor ant.: -$${saldoFavorAnt.toFixed(2)}`}
+                              title={`Items: ${formatMoney(displaySubtotal)} · Taxes: ${formatMoney(taxes)} · Envío: ${formatMoney(shippingCost)} · Saldo pend.: ${formatMoney(saldoPend)} · Depósitos: -${formatMoney(depositsApp)} · Saldo favor ant.: -${formatMoney(saldoFavorAnt)}`}
                               data-testid={`invoice-total-items-${invoice.id}`}
                             >
-                              items: ${totalRaw.toFixed(2)}
-                              {saldoFavorAnt > 0 && <> · saldo: -${saldoFavorAnt.toFixed(2)}</>}
+                              items: {formatMoney(totalRaw)}
+                              {saldoFavorAnt > 0 && <> · saldo: -{formatMoney(saldoFavorAnt)}</>}
                             </p>
                           )}
                           <p className="text-xs text-gray-400">{invoice.purchase_ids?.length || 0} items</p>
@@ -700,7 +706,7 @@ export default function AdminInvoices() {
                             <p className="font-medium">{p.item_name}</p>
                             <p className="text-sm text-gray-500">{p.store}</p>
                           </div>
-                          <p className="font-bold">${p.total.toFixed(2)}</p>
+                          <p className="font-bold">{formatMoney(p.total)}</p>
                         </div>
                       </div>
                     ))}
@@ -712,20 +718,20 @@ export default function AdminInvoices() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Subtotal</span>
-                      <span>${selectedInvoice.subtotal.toFixed(2)}</span>
+                      <span>{formatMoney(selectedInvoice.subtotal)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Impuestos</span>
-                      <span>${selectedInvoice.total_tax.toFixed(2)}</span>
+                      <span>{formatMoney(selectedInvoice.total_tax)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">Comisiones</span>
-                      <span>${selectedInvoice.total_commission.toFixed(2)}</span>
+                      <span>{formatMoney(selectedInvoice.total_commission)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-lg pt-2 border-t">
                       <span>Total</span>
                       <span className={selectedInvoice.is_annulled ? "text-red-600 line-through" : ""} style={{ color: selectedInvoice.is_annulled ? undefined : '#1E3A5F' }}>
-                        ${selectedInvoice.total.toFixed(2)}
+                        {formatMoney(selectedInvoice.total)}
                       </span>
                     </div>
                   </div>
@@ -977,7 +983,7 @@ export default function AdminInvoices() {
                     <div className="flex-1">
                       <div className="font-semibold text-slate-800">{inv.invoice_number || "—"}</div>
                       <div className="text-xs text-slate-500">
-                        Cliente {inv.customer_id} · Total ${Number(inv.total || 0).toFixed(2)}
+                        Cliente {inv.customer_id} · Total {formatMoney(inv.total)}
                       </div>
                       <div className="text-[11px] text-red-500 mt-1">
                         Anulada {inv.annulled_at ? new Date(inv.annulled_at).toLocaleString("es-EC") : "—"}

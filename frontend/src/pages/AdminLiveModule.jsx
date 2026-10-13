@@ -31,10 +31,16 @@ const getEffectiveTaxRate = (taxOption, customTax) => {
 };
 
 export default function AdminLiveModule() {
-  const { user } = useAuth();
+  const { user, hideFinancials } = useAuth();
   const navigate = useNavigate();
   const logoUrl = user?.tenant_logo || "https://customer-assets.emergentagent.com/job_compraenvivo/artifacts/qvyfsb43_WhatsApp%20Image%202026-02-03%20at%208.05.08%20PM.jpeg";
   const moduleEnabled = !!user?.live_module_enabled;
+  
+  // Format money with hideFinancials support
+  const formatMoney = (v) => {
+    if (hideFinancials) return "••••";
+    return "$" + Number(v || 0).toFixed(2);
+  };
 
   const [lives, setLives] = useState([]);
   const [selectedLive, setSelectedLive] = useState(null);
@@ -421,8 +427,8 @@ export default function AdminLiveModule() {
               </div>
               <div className="flex flex-nowrap items-center gap-x-5 mt-4 pt-4 border-t border-white/20">
                 <div><p className="text-[11px] opacity-70">Ventas</p><p className="text-lg font-bold leading-tight">{selectedLive.purchase_count || 0}</p></div>
-                <div><p className="text-[11px] opacity-70">Total</p><p className="text-lg font-bold leading-tight">${(selectedLive.total_sales || 0).toFixed(2)}</p></div>
-                <div><p className="text-[11px] opacity-70">Comisiones</p><p className="text-lg font-bold leading-tight">${(selectedLive.total_commissions || 0).toFixed(2)}</p></div>
+                <div><p className="text-[11px] opacity-70">Total</p><p className="text-lg font-bold leading-tight">{formatMoney(selectedLive.total_sales)}</p></div>
+                <div><p className="text-[11px] opacity-70">Comisiones</p><p className="text-lg font-bold leading-tight">{formatMoney(selectedLive.total_commissions)}</p></div>
               </div>
             </CardContent>
           </Card>
@@ -548,9 +554,9 @@ export default function AdminLiveModule() {
                   </div>
                   <div className="rounded-lg bg-slate-900 text-white px-3 py-2 text-center" data-testid="live-final-value">
                     <p className="text-[10px] opacity-70 leading-tight">
-                      {quantityNum > 1 ? `${quantityNum}x $${unitValue.toFixed(2)}` : 'Valor final'}
+                      {quantityNum > 1 ? `${quantityNum}x ${formatMoney(unitValue)}` : 'Valor final'}
                     </p>
-                    <p className="text-lg font-bold leading-tight">${finalValue.toFixed(2)}</p>
+                    <p className="text-lg font-bold leading-tight">{formatMoney(finalValue)}</p>
                   </div>
                 </div>
               </CardContent>
@@ -585,7 +591,7 @@ export default function AdminLiveModule() {
                             <span className="text-[10px] font-bold text-rose-600 shrink-0">{c.customer_id}</span>
                             <span className="truncate text-slate-700">{c.name}</span>
                           </span>
-                          <span className="text-xs text-slate-500 shrink-0">${Number(c.wallet_balance || 0).toFixed(2)}</span>
+                          <span className="text-xs text-slate-500 shrink-0">{formatMoney(c.wallet_balance)}</span>
                         </button>
                       ))}
                     </div>
@@ -615,8 +621,8 @@ export default function AdminLiveModule() {
                         {c.loading ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
                         ) : c.owes ? (
-                          <Badge className="bg-red-100 text-red-700 text-[10px] flex items-center gap-1" title={`Recargas: $${totalDeposits.toFixed(2)} - Compras: $${totalPurchases.toFixed(2)}`}>
-                            <AlertTriangle className="h-3 w-3" /> Debe ${calculatedOwes.toFixed(2)}
+                          <Badge className="bg-red-100 text-red-700 text-[10px] flex items-center gap-1" title={hideFinancials ? "Valores ocultos" : `Recargas: ${formatMoney(totalDeposits)} - Compras: ${formatMoney(totalPurchases)}`}>
+                            <AlertTriangle className="h-3 w-3" /> Debe {formatMoney(calculatedOwes)}
                           </Badge>
                         ) : (
                           <Badge className="bg-green-100 text-green-700 text-[10px] flex items-center gap-1">
@@ -625,7 +631,7 @@ export default function AdminLiveModule() {
                         )}
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-xs text-slate-500">Saldo ${Number(c.wallet_balance || 0).toFixed(2)}</span>
+                        <span className="text-xs text-slate-500">Saldo {formatMoney(c.wallet_balance)}</span>
                         <button onClick={() => removeClient(c.customer_id)} className="text-slate-400 hover:text-rose-600" data-testid={`live-client-remove-${c.customer_id}`}>
                           <X className="h-4 w-4" />
                         </button>
@@ -641,7 +647,7 @@ export default function AdminLiveModule() {
                   data-testid="live-register-btn"
                 >
                   {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : (
-                    <>Registrar {quantityNum > 1 ? `${quantityNum}x ` : ''}en {selectedClients.length} cliente(s) · ${(finalValue * selectedClients.length).toFixed(2)}</>
+                    <>Registrar {quantityNum > 1 ? `${quantityNum}x ` : ''}en {selectedClients.length} cliente(s) · {formatMoney(finalValue * selectedClients.length)}</>
                   )}
                 </Button>
               </CardContent>
@@ -676,15 +682,15 @@ export default function AdminLiveModule() {
                         <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
                           <span className="flex items-center gap-1">
                             <DollarSign className="h-3 w-3" />
-                            {prod.price.toFixed(2)}
+                            {formatMoney(prod.price)}
                           </span>
                           <span className="text-slate-400">+</span>
                           <span className="text-green-600">
-                            ${(prod.commission || 0).toFixed(2)}
+                            {formatMoney(prod.commission)}
                           </span>
                           <span className="text-slate-400">=</span>
                           <span className="font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
-                            ${(prod.price + (prod.commission || 0)).toFixed(2)}
+                            {formatMoney(prod.price + (prod.commission || 0))}
                           </span>
                         </div>
                         
@@ -745,7 +751,7 @@ export default function AdminLiveModule() {
                 Producto: <span className="font-semibold text-rose-600">{addToProductModal.item_name}</span>
               </p>
               <p className="text-xs text-slate-400">
-                ${addToProductModal.price.toFixed(2)} + ${addToProductModal.commission.toFixed(2)} = ${(addToProductModal.price + addToProductModal.commission).toFixed(2)}
+                {formatMoney(addToProductModal.price)} + {formatMoney(addToProductModal.commission)} = {formatMoney(addToProductModal.price + addToProductModal.commission)}
               </p>
             </div>
 
@@ -774,7 +780,7 @@ export default function AdminLiveModule() {
                           <span className="text-[10px] font-bold text-rose-600 shrink-0">{c.customer_id}</span>
                           <span className="truncate text-slate-700">{c.name}</span>
                         </span>
-                        <span className="text-xs text-slate-500 shrink-0">${Number(c.wallet_balance || 0).toFixed(2)}</span>
+                        <span className="text-xs text-slate-500 shrink-0">{formatMoney(c.wallet_balance)}</span>
                       </button>
                     ))}
                   </div>
@@ -813,7 +819,7 @@ export default function AdminLiveModule() {
                 {submittingAdd ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
-                  <>Agregar {addingClients.length} cliente(s) · ${((addToProductModal.price + addToProductModal.commission) * addingClients.length).toFixed(2)}</>
+                  <>Agregar {addingClients.length} cliente(s) · {formatMoney((addToProductModal.price + addToProductModal.commission) * addingClients.length)}</>
                 )}
               </Button>
             </div>

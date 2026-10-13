@@ -12,6 +12,13 @@
 - identifier: maria@outletsusaec.com
 - password: empleado123
 
+## Empleado Sin Valores Financieros (NUEVO)
+- identifier: empleado_sindinero
+- email: sindinero@test.com
+- password: 123456
+- Permiso especial: `hide_financial_values: true`
+- Este empleado tiene acceso a todo pero los valores de dinero aparecen como "••••"
+
 ## Cliente seed (100 clientes, todos con la misma password)
 - identifier: customer_id (ej: J2934, A2824, A5905)
 - password: 123

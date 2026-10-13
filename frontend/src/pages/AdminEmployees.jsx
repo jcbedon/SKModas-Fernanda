@@ -40,6 +40,12 @@ const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Visibilidad financiera",
+    items: [
+      { key: "hide_financial_values", label: "🔒 Ocultar valores de dinero", description: "Oculta TODOS los valores monetarios en la app: ventas, comisiones, ganancias, saldos, facturas, cuentas bancarias, estadísticas. El empleado ve la info pero sin montos." },
+    ],
+  },
+  {
     title: "Estadísticas",
     items: [
       { key: "view_statistics", label: "Acceso al módulo Estadísticas", description: "Permite entrar a /admin/stats (toggle maestro)" },

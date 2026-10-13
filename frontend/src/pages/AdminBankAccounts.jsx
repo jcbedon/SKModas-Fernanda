@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/App";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ import {
   Plus,
   Trash2,
   Settings2,
+  EyeOff,
 } from "lucide-react";
 import {
   getBankAccountsSummary,
@@ -41,7 +43,6 @@ import {
 } from "@/lib/api";
 import { generateBankStatementPDF } from "@/lib/bankStatementPDF";
 
-const fmtMoney = (v) => `$${Number(v || 0).toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (iso) => {
   if (!iso) return "—";
   try {
@@ -63,6 +64,14 @@ const kindMeta = {
 
 export default function AdminBankAccounts() {
   const navigate = useNavigate();
+  const { hideFinancials } = useAuth();
+  
+  // Money formatter that respects hideFinancials permission
+  const fmtMoney = (v) => {
+    if (hideFinancials) return "••••";
+    return `$${Number(v || 0).toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+  
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState(null);
   const [selected, setSelected] = useState(null);

@@ -516,6 +516,8 @@ class EmployeePermissions(BaseModel):
     stats_detalle: bool = False
     # Visualización de las tarjetas monetarias del encabezado en Estadísticas
     stats_view_money_kpis: bool = False
+    # Ocultar valores financieros en toda la app
+    hide_financial_values: bool = False  # Si está activo, oculta todos los valores de dinero en toda la aplicación
 
 class Employee(BaseModel):
     """Employee model with granular permissions"""

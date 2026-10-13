@@ -34,6 +34,7 @@ import {
 import { uploadTenantLogo } from "@/lib/api";
 import { useRefreshOnTabFocus } from "@/hooks/useRefreshOnTabFocus";
 import AstridHeroBanner from "@/components/AstridHeroBanner";
+import { useHideFinancials } from "@/components/MoneyDisplay";
 const DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_compraenvivo/artifacts/qvyfsb43_WhatsApp%20Image%202026-02-03%20at%208.05.08%20PM.jpeg";
 
 // Week boundary: Monday 12:00 local → next Monday 11:59:59 local.
@@ -63,7 +64,8 @@ function getWeekRange(weeksBack = 0) {
 }
 
 export default function AdminDashboard() {
-  const { user, logout, updateTenantLogo } = useAuth();
+  const { user, logout, updateTenantLogo, hideFinancials } = useAuth();
+  const { formatMoney } = useHideFinancials();
   const logoUrl = user?.tenant_logo || DEFAULT_LOGO;
   const navigate = useNavigate();
   const [summary, setSummary] = useState(null);
@@ -286,7 +288,7 @@ export default function AdminDashboard() {
                   <div>
                     <p className="font-bold">LIVE ACTIVO: {activeLive.title}</p>
                     <p className="text-sm text-red-100">
-                      {activeLive.purchase_count} ventas | ${activeLive.total_sales?.toFixed(2)} total
+                      {activeLive.purchase_count} ventas | {formatMoney(activeLive.total_sales)} total
                     </p>
                   </div>
                 </div>
@@ -327,18 +329,20 @@ export default function AdminDashboard() {
         </div>
         <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-6">
           {[
-            { key: "clients", icon: Users, value: summary?.client_count || 0, label: "Clientes", bg: "bg-slate-50", iconBg: "rgba(30,58,95,0.1)", iconColor: "#1E3A5F", prefix: "" },
-            { key: "sales", icon: DollarSign, value: `$${summary?.total_sales?.toFixed(0) || 0}`, label: "Ventas", bg: "bg-green-50", iconBg: "rgba(46,204,113,0.1)", iconColor: "#2ECC71", prefix: "", onClick: openSalesDetail },
-            { key: "commissions", icon: TrendingUp, value: `$${summary?.total_commissions?.toFixed(0) || 0}`, label: "Comisiones", bg: "bg-yellow-50", iconBg: "rgba(234,179,8,0.1)", iconColor: "#ca8a04", prefix: "" },
-            { key: "shipments", icon: Truck, value: `$${summary?.total_shipping?.toFixed(0) || 0}`, label: "Envios", bg: "bg-purple-50", iconBg: "rgba(147,51,234,0.1)", iconColor: "#9333ea", prefix: "", onClick: () => navigate("/admin/shipments") },
-            { key: "packages", icon: Package, value: summary?.total_packages || 0, label: `Paquetes${summary?.shipments_count != null ? ` · ${summary.shipments_count} envío${summary.shipments_count === 1 ? '' : 's'}` : ''}`, bg: "bg-orange-50", iconBg: "rgba(249,115,22,0.1)", iconColor: "#ea580c", prefix: "", onClick: () => navigate("/admin/packages-report") },
-            { key: "buyers", icon: ShoppingBag, value: summary?.buyers_count || 0, label: "Compraron", bg: "bg-teal-50", iconBg: "rgba(20,184,166,0.1)", iconColor: "#0d9488", prefix: "", onClick: openBuyersReport },
+            { key: "clients", icon: Users, value: summary?.client_count || 0, label: "Clientes", bg: "bg-slate-50", iconBg: "rgba(30,58,95,0.1)", iconColor: "#1E3A5F", prefix: "", isMoney: false },
+            { key: "sales", icon: DollarSign, value: summary?.total_sales, label: "Ventas", bg: "bg-green-50", iconBg: "rgba(46,204,113,0.1)", iconColor: "#2ECC71", prefix: "", onClick: openSalesDetail, isMoney: true },
+            { key: "commissions", icon: TrendingUp, value: summary?.total_commissions, label: "Comisiones", bg: "bg-yellow-50", iconBg: "rgba(234,179,8,0.1)", iconColor: "#ca8a04", prefix: "", isMoney: true },
+            { key: "shipments", icon: Truck, value: summary?.total_shipping, label: "Envios", bg: "bg-purple-50", iconBg: "rgba(147,51,234,0.1)", iconColor: "#9333ea", prefix: "", onClick: () => navigate("/admin/shipments"), isMoney: true },
+            { key: "packages", icon: Package, value: summary?.total_packages || 0, label: `Paquetes${summary?.shipments_count != null ? ` · ${summary.shipments_count} envío${summary.shipments_count === 1 ? '' : 's'}` : ''}`, bg: "bg-orange-50", iconBg: "rgba(249,115,22,0.1)", iconColor: "#ea580c", prefix: "", isMoney: false },
+            { key: "buyers", icon: ShoppingBag, value: summary?.buyers_count || 0, label: "Compraron", bg: "bg-teal-50", iconBg: "rgba(20,184,166,0.1)", iconColor: "#0d9488", prefix: "", onClick: openBuyersReport, isMoney: false },
           ].filter((stat) => canSeeMoneyCards || !["sales", "commissions", "shipments"].includes(stat.key)).map((stat) => (
             <div key={stat.key} className={`${stat.bg} rounded-xl p-3 text-center ${stat.onClick ? 'cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-slate-300 transition-all' : ''}`} data-testid={`stat-${stat.key}`} onClick={stat.onClick}>
               <div className="w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-1.5" style={{ background: stat.iconBg }}>
                 <stat.icon className="h-4 w-4" style={{ color: stat.iconColor }} />
               </div>
-              <p className="text-lg font-extrabold text-slate-800 leading-tight">{stat.value}</p>
+              <p className="text-lg font-extrabold text-slate-800 leading-tight">
+                {stat.isMoney ? formatMoney(stat.value) : stat.value}
+              </p>
               <p className="text-[10px] text-gray-500 mt-0.5">{stat.label}</p>
             </div>
           ))}

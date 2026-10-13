@@ -393,3 +393,30 @@ Nuevo módulo completo para gestión de productos de inventario propios del nego
 - Permiso específico `manage_inventory` para empleados (actualmente hereda de admin)
 - Refactorizar AdminInventory.jsx (>1000 líneas) en componentes más pequeños por diálogo
 
+---
+
+## Permiso "Ocultar Valores Financieros" (13-oct-2026)
+
+### Descripción
+Nuevo permiso `hide_financial_values` que permite crear empleados con acceso completo a la app pero SIN ver valores de dinero. Todos los montos aparecen como "••••".
+
+### Implementación
+- **Backend**: Añadido `hide_financial_values: bool = False` a `EmployeePermissions`
+- **Frontend**:
+  - Nuevo contexto `hideFinancials` en AuthContext (App.js)
+  - Nuevo componente `MoneyDisplay` en `/components/MoneyDisplay.jsx`
+  - Hook `useHideFinancials()` para formatear dinero respetando el permiso
+
+### Páginas Modificadas
+- `AdminDashboard.jsx`: Banner de Live activo, tarjetas de estadísticas
+- `AdminBankAccounts.jsx`: Todos los valores de saldos, depósitos, retiros
+- `AdminStats.jsx`: KPIs, totales, comisiones, rankings
+- `AdminInvoices.jsx`: Totales de facturas, items, subtotales, impuestos
+- `AdminLiveModule.jsx`: Precios, comisiones, saldos de clientes, totales de Live
+- `AdminEmployees.jsx`: Nueva sección "Visibilidad financiera" en permisos
+
+### Credenciales de Prueba
+- Email: sindinero@test.com
+- Password: 123456
+- Tiene acceso a: clientes, compras, lives, recargas, envíos, facturas, reportes, estadísticas
+- NO ve: ningún valor de dinero (aparece como "••••")
