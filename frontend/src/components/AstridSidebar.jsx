@@ -21,6 +21,7 @@ import {
   LogOut,
   Video,
   Boxes,
+  Package,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -34,6 +35,7 @@ const ADMIN_NAV = [
   { to: "/admin/wallet", label: "Recargas", icon: Wallet },
   { to: "/admin/shipments", label: "Envíos", icon: Truck },
   { to: "/admin/inventory", label: "Inventario", icon: Boxes },
+  { to: "/admin/pacas", label: "Pacas", icon: Package },
   { to: "/admin/referrals", label: "Referidos", icon: Gift },
   { to: "/admin/reports", label: "Reportes", icon: BarChart3 },
   { to: "/admin/stats", label: "Estadísticas", icon: TrendingUp },

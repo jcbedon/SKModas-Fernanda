@@ -29,6 +29,8 @@ import AdminInventory from "@/pages/AdminInventory";
 import AdminInventoryStats from "@/pages/AdminInventoryStats";
 import AdminInventorySelect from "@/pages/AdminInventorySelect";
 import AdminInventoryHistory from "@/pages/AdminInventoryHistory";
+import AdminPacas from "@/pages/AdminPacas";
+import AdminPacasStats from "@/pages/AdminPacasStats";
 import SuperadminDashboard from "@/pages/SuperadminDashboard";
 import { BrandBackgroundVideo } from "@/components/BrandBackgroundVideo";
 import AstridSidebar from "@/components/AstridSidebar";
@@ -229,6 +231,8 @@ function App() {
           <Route path="/admin/inventory/history" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventoryHistory /></ProtectedRoute>} />
           <Route path="/admin/inventory/:location" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventory /></ProtectedRoute>} />
           <Route path="/admin/inventory-stats/:location" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventoryStats /></ProtectedRoute>} />
+          <Route path="/admin/pacas" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminPacas /></ProtectedRoute>} />
+          <Route path="/admin/pacas/stats" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminPacasStats /></ProtectedRoute>} />
 
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />

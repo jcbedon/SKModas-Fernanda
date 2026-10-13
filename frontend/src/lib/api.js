@@ -276,4 +276,14 @@ export const getLowStockAlerts = (threshold = 5, location = null) =>
 export const getInventoryMovementHistory = (params = {}) =>
   api.get("/inventory/movement-history", { params });
 
+// Pacas
+export const getPacas = () => api.get("/pacas");
+export const getPaca = (pacaId) => api.get(`/pacas/${pacaId}`);
+export const createPaca = (data) => api.post("/pacas", data);
+export const updatePaca = (pacaId, data) => api.put(`/pacas/${pacaId}`, data);
+export const deletePaca = (pacaId) => api.delete(`/pacas/${pacaId}`);
+export const createPacaSale = (data) => api.post("/pacas/sales", data);
+export const getPacaSales = (period = "week") => api.get("/pacas/sales/list", { params: { period } });
+export const getPacaStats = (period = "week") => api.get("/pacas/stats", { params: { period } });
+
 export default api;

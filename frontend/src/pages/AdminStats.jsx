@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/App";
-import { getBusinessStats, getClientsDebtsReport, getInactiveClientsReport } from "@/lib/api";
+import { getBusinessStats, getClientsDebtsReport, getInactiveClientsReport, getPacaStats } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, DollarSign, TrendingUp, TrendingDown, Wallet, Store, Radio, BarChart3, PieChart as PieChartIcon, Users, AlertTriangle, Search, Filter, ChevronDown, ChevronUp, Receipt, Image, Clock, Phone } from "lucide-react";
+import { ArrowLeft, DollarSign, TrendingUp, TrendingDown, Wallet, Store, Radio, BarChart3, PieChart as PieChartIcon, Users, AlertTriangle, Search, Filter, ChevronDown, ChevronUp, Receipt, Image, Clock, Phone, Package } from "lucide-react";
 import { SalesTrendChart, StoreBarChart, ProfitPieChart, LiveBarChart, ClientsDebtsChart, ClientsDebtsPieChart, ClientsByDateChart } from "@/components/StatsCharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import StoreProfitsReport from "@/components/StoreProfitsReport";
@@ -72,6 +72,7 @@ export default function AdminStats() {
   const [stats, setStats] = useState(null);
   const [debtsData, setDebtsData] = useState(null);
   const [inactiveData, setInactiveData] = useState(null);
+  const [pacasStats, setPacasStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("resumen");
   const [period, setPeriod] = useState("all");
@@ -93,14 +94,16 @@ export default function AdminStats() {
   const loadStats = async (p) => {
     try {
       setLoading(true);
-      const [statsRes, debtsRes, inactiveRes] = await Promise.all([
+      const [statsRes, debtsRes, inactiveRes, pacasRes] = await Promise.all([
         getBusinessStats(p || period),
         getClientsDebtsReport(),
         getInactiveClientsReport().catch(() => ({ data: { clients: [], summary: {} } })),
+        getPacaStats(p || period).catch(() => ({ data: { total_count: 0, total_sales: 0, total_commission: 0 } })),
       ]);
       setStats(statsRes.data);
       setDebtsData(debtsRes.data);
       setInactiveData(inactiveRes.data);
+      setPacasStats(pacasRes.data);
     } catch (e) {
       toast.error("Error al cargar estadisticas");
     } finally {
@@ -314,7 +317,7 @@ export default function AdminStats() {
         {/* Summary Cards — KPIs de dinero (visibles solo si el empleado tiene
             el permiso `stats_view_money_kpis` o es admin). */}
         {canSeeMoneyKpis && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card className="rounded-xl bg-gradient-to-br from-green-50 to-green-100 border-green-200">
             <CardContent className="p-4">
               <Badge className="bg-green-600 text-white text-xs mb-2">Ganancia</Badge>
@@ -341,6 +344,16 @@ export default function AdminStats() {
               <Badge variant="outline" className="text-purple-600 border-purple-300 text-xs mb-2">{rev.shipment_count} envios</Badge>
               <p className="text-2xl font-extrabold text-purple-700">{formatMoney(rev.total_shipping)}</p>
               <p className="text-xs text-purple-600">Envios</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-xl bg-gradient-to-br from-amber-50 to-orange-100 border-amber-200" data-testid="pacas-stats-card">
+            <CardContent className="p-4">
+              <Badge variant="outline" className="text-amber-600 border-amber-300 text-xs mb-2 flex items-center gap-1 w-fit">
+                <Package className="h-3 w-3" />
+                {pacasStats?.total_count || 0} pacas
+              </Badge>
+              <p className="text-2xl font-extrabold text-amber-700">{formatMoney(pacasStats?.total_commission || 0)}</p>
+              <p className="text-xs text-amber-600">Ganancias Pacas</p>
             </CardContent>
           </Card>
         </div>

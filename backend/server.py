@@ -729,6 +729,56 @@ class EmployeeUpdate(BaseModel):
     permissions: Optional[dict] = None
     status: Optional[str] = None
 
+# ==================== PACAS MODELS ====================
+
+class Paca(BaseModel):
+    """Model for Pacas (product bundles/bales)"""
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tenant_id: str
+    name: str  # e.g., "Paca de niño", "Paca de maquillaje"
+    description: Optional[str] = None
+    sale_price: float  # Precio de venta
+    commission: float  # Comisión/ganancia
+    status: str = "active"  # active, inactive
+    created_by: str
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+class PacaCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    sale_price: float
+    commission: float
+
+class PacaUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    sale_price: Optional[float] = None
+    commission: Optional[float] = None
+    status: Optional[str] = None
+
+class PacaSale(BaseModel):
+    """Record of a paca sale to a client"""
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tenant_id: str
+    paca_id: str
+    paca_name: str
+    customer_id: str
+    user_id: str  # Client's user_id
+    sale_price: float
+    commission: float
+    total: float  # sale_price (commission is the profit margin)
+    status: str = "pending"  # pending, invoiced
+    invoice_id: Optional[str] = None
+    sold_by: str  # Admin/employee who made the sale
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+class PacaSaleCreate(BaseModel):
+    paca_id: str
+    customer_id: str
+
 # ==================== JWT & AUTH ====================
 
 def create_token(user_id: str, role: str, tenant_id: str = None):
@@ -11213,6 +11263,285 @@ async def get_inventory_movement_history(
         "count": len(logs),
         "movements": logs
     }
+
+
+# ==================== PACAS ENDPOINTS ====================
+
+@api_router.get("/pacas")
+async def get_pacas(user=Depends(get_current_user)):
+    """Get all pacas for the tenant"""
+    pacas = await db.pacas.find(
+        {"tenant_id": user["tenant_id"]},
+        {"_id": 0}
+    ).sort("name", 1).to_list(500)
+    return pacas
+
+@api_router.get("/pacas/sales/list")
+async def get_paca_sales(
+    period: str = Query("week", description="Period: 'week', 'month', 'all'"),
+    user=Depends(get_current_user)
+):
+    """Get paca sales with optional period filter"""
+    tid = user["tenant_id"]
+    
+    query = {"tenant_id": tid}
+    if period == "week":
+        week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        query["created_at"] = {"$gte": week_ago}
+    elif period == "month":
+        month_ago = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        query["created_at"] = {"$gte": month_ago}
+    
+    sales = await db.paca_sales.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    
+    # Enrich with client names
+    for sale in sales:
+        client = await db.users.find_one(
+            {"customer_id": sale["customer_id"], "tenant_id": tid},
+            {"_id": 0, "name": 1}
+        )
+        sale["client_name"] = client.get("name") if client else "—"
+    
+    return sales
+
+@api_router.get("/pacas/stats")
+async def get_paca_stats(
+    period: str = Query("week", description="Period: 'week', 'month', 'all'"),
+    user=Depends(get_current_user)
+):
+    """Get statistics for paca sales"""
+    tid = user["tenant_id"]
+    
+    query = {"tenant_id": tid}
+    if period == "week":
+        start_date = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        query["created_at"] = {"$gte": start_date}
+    elif period == "month":
+        start_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        query["created_at"] = {"$gte": start_date}
+    
+    sales = await db.paca_sales.find(query, {"_id": 0}).to_list(5000)
+    
+    total_sales = sum(s.get("sale_price", 0) for s in sales)
+    total_commission = sum(s.get("commission", 0) for s in sales)
+    total_count = len(sales)
+    
+    # Sales by paca type
+    paca_breakdown = {}
+    for s in sales:
+        pn = s.get("paca_name", "Otro")
+        if pn not in paca_breakdown:
+            paca_breakdown[pn] = {"count": 0, "sales": 0, "commission": 0}
+        paca_breakdown[pn]["count"] += 1
+        paca_breakdown[pn]["sales"] += s.get("sale_price", 0)
+        paca_breakdown[pn]["commission"] += s.get("commission", 0)
+    
+    # Convert to list and sort by count
+    paca_list = [
+        {"name": k, **v}
+        for k, v in paca_breakdown.items()
+    ]
+    paca_list.sort(key=lambda x: x["count"], reverse=True)
+    
+    # Daily breakdown for trend chart
+    daily_stats = {}
+    for s in sales:
+        day = s.get("created_at", "")[:10]
+        if day not in daily_stats:
+            daily_stats[day] = {"date": day, "count": 0, "sales": 0, "commission": 0}
+        daily_stats[day]["count"] += 1
+        daily_stats[day]["sales"] += s.get("sale_price", 0)
+        daily_stats[day]["commission"] += s.get("commission", 0)
+    
+    daily_list = list(daily_stats.values())
+    daily_list.sort(key=lambda x: x["date"])
+    
+    return {
+        "total_sales": round(total_sales, 2),
+        "total_commission": round(total_commission, 2),
+        "total_count": total_count,
+        "avg_sale": round(total_sales / total_count, 2) if total_count > 0 else 0,
+        "avg_commission": round(total_commission / total_count, 2) if total_count > 0 else 0,
+        "by_paca": paca_list,
+        "daily_trend": daily_list
+    }
+
+@api_router.post("/pacas")
+async def create_paca(data: PacaCreate, user=Depends(get_current_user)):
+    """Create a new paca"""
+    if user["role"] not in ["admin", "employee"]:
+        raise HTTPException(status_code=403, detail="No autorizado")
+    
+    paca = Paca(
+        tenant_id=user["tenant_id"],
+        name=data.name,
+        description=data.description,
+        sale_price=data.sale_price,
+        commission=data.commission,
+        created_by=user["user_id"]
+    )
+    await db.pacas.insert_one(paca.model_dump())
+    
+    # Audit log
+    await log_audit_action(
+        tenant_id=user["tenant_id"],
+        user_id=user["user_id"],
+        user_name=user.get("name", "Admin"),
+        user_role=user["role"],
+        action="create_paca",
+        entity_type="paca",
+        entity_id=paca.id,
+        entity_name=data.name,
+        details={"sale_price": data.sale_price, "commission": data.commission}
+    )
+    
+    return {"message": "Paca creada exitosamente", "id": paca.id}
+
+@api_router.post("/pacas/sales")
+async def create_paca_sale(data: PacaSaleCreate, user=Depends(get_current_user)):
+    """Sell a paca to a client - creates a purchase for invoicing"""
+    if user["role"] not in ["admin", "employee"]:
+        raise HTTPException(status_code=403, detail="No autorizado")
+    
+    tid = user["tenant_id"]
+    
+    # Get paca
+    paca = await db.pacas.find_one({"id": data.paca_id, "tenant_id": tid}, {"_id": 0})
+    if not paca:
+        raise HTTPException(status_code=404, detail="Paca no encontrada")
+    
+    # Get client
+    customer_id = data.customer_id.upper().strip()
+    client = await db.users.find_one({"customer_id": customer_id, "tenant_id": tid}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    
+    now_iso = datetime.now(timezone.utc).isoformat()
+    
+    # Create the sale record
+    sale = PacaSale(
+        tenant_id=tid,
+        paca_id=paca["id"],
+        paca_name=paca["name"],
+        customer_id=customer_id,
+        user_id=client["id"],
+        sale_price=paca["sale_price"],
+        commission=paca["commission"],
+        total=paca["sale_price"],
+        sold_by=user["user_id"]
+    )
+    await db.paca_sales.insert_one(sale.model_dump())
+    
+    # Create a purchase record for invoicing (similar to inventory)
+    purchase_dict = {
+        "id": str(uuid.uuid4()),
+        "tenant_id": tid,
+        "user_id": client["id"],
+        "customer_id": customer_id,
+        "item_name": f"[PACA] {paca['name']}",
+        "store": "Pacas",
+        "price": paca["sale_price"],
+        "tax": 0,
+        "tax_rate": 0,
+        "apply_tax": False,
+        "price_with_tax": paca["sale_price"],
+        "commission": paca["commission"],
+        "apply_commission": True,
+        "total": paca["sale_price"],
+        "status": "confirmed",
+        "entry_source": "paca",
+        "paca_sale_id": sale.id,
+        "created_at": now_iso,
+    }
+    await db.purchases.insert_one(purchase_dict)
+    
+    # Update wallet
+    wallet = await db.wallets.find_one({"user_id": client["id"], "tenant_id": tid}, {"_id": 0})
+    if wallet:
+        new_balance = wallet["available"] - paca["sale_price"]
+        await db.wallets.update_one(
+            {"user_id": client["id"], "tenant_id": tid},
+            {"$set": {"available": new_balance, "updated_at": now_iso}}
+        )
+        
+        # Create wallet transaction
+        transaction = WalletTransaction(
+            tenant_id=tid,
+            user_id=client["id"],
+            customer_id=customer_id,
+            type="purchase",
+            amount=-paca["sale_price"],
+            balance_after=new_balance,
+            description=f"Compra Paca: {paca['name']}",
+            status="approved",
+            approved_at=now_iso,
+            purchase_id=purchase_dict["id"]
+        )
+        await db.wallet_transactions.insert_one(transaction.model_dump())
+    
+    # Audit log
+    await log_audit_action(
+        tenant_id=tid,
+        user_id=user["user_id"],
+        user_name=user.get("name", "Admin"),
+        user_role=user["role"],
+        action="paca_sale",
+        entity_type="paca_sale",
+        entity_id=sale.id,
+        entity_name=paca["name"],
+        details={
+            "customer_id": customer_id,
+            "sale_price": paca["sale_price"],
+            "commission": paca["commission"],
+            "purchase_id": purchase_dict["id"]
+        }
+    )
+    
+    return {
+        "message": "Paca vendida exitosamente",
+        "sale_id": sale.id,
+        "purchase_id": purchase_dict["id"],
+        "client_name": client.get("name"),
+        "new_balance": wallet["available"] - paca["sale_price"] if wallet else None
+    }
+
+@api_router.get("/pacas/{paca_id}")
+async def get_paca(paca_id: str, user=Depends(get_current_user)):
+    """Get a single paca"""
+    paca = await db.pacas.find_one(
+        {"id": paca_id, "tenant_id": user["tenant_id"]},
+        {"_id": 0}
+    )
+    if not paca:
+        raise HTTPException(status_code=404, detail="Paca no encontrada")
+    return paca
+
+@api_router.put("/pacas/{paca_id}")
+async def update_paca(paca_id: str, data: PacaUpdate, user=Depends(get_current_user)):
+    """Update a paca"""
+    if user["role"] not in ["admin", "employee"]:
+        raise HTTPException(status_code=403, detail="No autorizado")
+    
+    paca = await db.pacas.find_one({"id": paca_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+    if not paca:
+        raise HTTPException(status_code=404, detail="Paca no encontrada")
+    
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.pacas.update_one({"id": paca_id}, {"$set": update_data})
+    return {"message": "Paca actualizada"}
+
+@api_router.delete("/pacas/{paca_id}")
+async def delete_paca(paca_id: str, user=Depends(get_current_user)):
+    """Delete a paca"""
+    if user["role"] not in ["admin", "employee"]:
+        raise HTTPException(status_code=403, detail="No autorizado")
+    
+    result = await db.pacas.delete_one({"id": paca_id, "tenant_id": user["tenant_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Paca no encontrada")
+    return {"message": "Paca eliminada"}
 
 
 app.include_router(api_router)
