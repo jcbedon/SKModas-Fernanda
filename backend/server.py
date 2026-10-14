@@ -11581,7 +11581,8 @@ async def cleanup_database(user=Depends(get_current_user)):
         "users",           # Clientes
         "invoices",        # Facturas
         "purchases",       # Compras
-        "products",        # Productos de inventario
+        "products",        # Productos (legacy)
+        "inventory_products",  # Productos de inventario
         "inventory_movements",  # Movimientos de inventario
         "pacas",           # Pacas
         "paca_sales",      # Ventas de pacas
