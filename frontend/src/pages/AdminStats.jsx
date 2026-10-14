@@ -29,7 +29,7 @@ export default function AdminStats() {
   };
   
   // ListItem component for ranking lists
-  const ListItem = ({ rank, name, count, sales, commission, color }) => (
+  const ListItem = ({ rank, name, count, sales, commission, taxes, color }) => (
     <div className="flex items-center justify-between py-2 border-b last:border-0">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm" style={{ background: color }}>
@@ -43,6 +43,7 @@ export default function AdminStats() {
       <div className="text-right">
         <p className="font-bold text-slate-800">{formatMoney(sales)}</p>
         <p className="text-xs text-yellow-600">+{formatMoney(commission)}</p>
+        {(taxes || 0) > 0 && <p className="text-xs text-amber-500">-{formatMoney(taxes)} tax</p>}
       </div>
     </div>
   );
@@ -337,6 +338,12 @@ export default function AdminStats() {
               <TrendingUp className="h-5 w-5 text-yellow-600 mb-2" />
               <p className="text-2xl font-extrabold text-yellow-700">{formatMoney(rev.total_commissions)}</p>
               <p className="text-xs text-yellow-600">Comisiones</p>
+              {(rev.total_shopper_taxes || 0) > 0 && (
+                <div className="mt-1 pt-1 border-t border-yellow-300/50">
+                  <p className="text-xs text-amber-600">-{formatMoney(rev.total_shopper_taxes)} taxes</p>
+                  <p className="text-sm font-bold text-green-600">Neto: {formatMoney(rev.net_profit)}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
           <Card className="rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
@@ -419,10 +426,13 @@ export default function AdminStats() {
                   <div className="flex justify-between py-2 border-b"><span className="text-gray-600">Ventas Productos</span><span className="font-bold">{formatMoney(rev.total_product_sales)}</span></div>
                   <div className="flex justify-between py-2 border-b"><span className="text-gray-600">Tax Cobrado</span><span className="font-bold">{formatMoney(rev.total_tax_collected)}</span></div>
                   <div className="flex justify-between py-2 border-b"><span className="text-gray-600">Comisiones</span><span className="font-bold text-yellow-600">{formatMoney(rev.total_commissions)}</span></div>
+                  {(rev.total_shopper_taxes || 0) > 0 && (
+                    <div className="flex justify-between py-2 border-b"><span className="text-gray-600">Taxes Pagados (Shopper)</span><span className="font-bold text-amber-600">-{formatMoney(rev.total_shopper_taxes)}</span></div>
+                  )}
                   <div className="flex justify-between py-2 border-b"><span className="text-gray-600">Envios</span><span className="font-bold text-purple-600">{formatMoney(rev.total_shipping)}</span></div>
                   <div className="flex justify-between py-3 bg-green-50 rounded-lg px-3">
-                    <span className="font-bold text-green-800">GANANCIA TOTAL</span>
-                    <span className="font-extrabold text-2xl text-green-600">{formatMoney(rev.gross_profit)}</span>
+                    <span className="font-bold text-green-800">GANANCIA NETA</span>
+                    <span className="font-extrabold text-2xl text-green-600">{formatMoney((rev.total_shopper_taxes || 0) > 0 ? rev.net_profit : rev.gross_profit)}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -1163,7 +1173,7 @@ export default function AdminStats() {
                 </CardHeader>
                 <CardContent>
                   {lives.length > 0 ? lives.slice(0, 8).map((l, i) => (
-                    <ListItem key={i} rank={i + 1} name={l.name} count={l.compras} sales={l.ventas} commission={l.comisiones} color={colors[i % colors.length]} />
+                    <ListItem key={i} rank={i + 1} name={l.name} count={l.compras} sales={l.ventas} commission={l.comisiones} taxes={l.taxes_pagados} color={colors[i % colors.length]} />
                   )) : <p className="text-center text-gray-400 py-4">Sin datos</p>}
                 </CardContent>
               </Card>

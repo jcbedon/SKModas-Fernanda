@@ -366,6 +366,7 @@ class Live(BaseModel):
     ended_at: Optional[str] = None
     total_sales: float = 0.0
     total_commissions: float = 0.0
+    total_taxes_paid: float = 0.0  # Taxes paid by personal shopper (reduces net profit)
     purchase_count: int = 0
     # Store invoice fields (for profit calculation)
     store_invoice_amount: Optional[float] = None  # What was actually paid to the store
@@ -666,6 +667,7 @@ class LiveModulePurchaseCreate(BaseModel):
     store: Optional[str] = None
     price: float
     commission_amount: Optional[float] = None  # empty => no commission
+    tax_amount: Optional[float] = None  # Taxes paid by personal shopper (reduces profit)
     customer_ids: List[str]
     quantities: Optional[List[int]] = None  # Quantity per client (matches customer_ids order)
 
@@ -5360,9 +5362,11 @@ async def create_live_module_purchases(data: LiveModulePurchaseCreate, current_u
 
     # Tax comes from the live (chosen at creation). Commission is a flat amount
     # per item; empty => nothing added.
+    # tax_amount is the tax PAID BY THE PERSONAL SHOPPER (reduces their profit).
     apply_tax = bool(live.get("apply_tax"))
     tax_rate = float(live.get("tax_rate") or 0) if apply_tax else 0
     commission_fee = round(float(data.commission_amount), 2) if data.commission_amount else 0
+    shopper_tax = round(float(data.tax_amount), 2) if data.tax_amount else 0  # Tax paid by shopper
     price = round(float(data.price), 2)
     tax = round(price * tax_rate, 2)
     price_with_tax = round(price + tax, 2)
@@ -5373,6 +5377,7 @@ async def create_live_module_purchases(data: LiveModulePurchaseCreate, current_u
     failed = []
     agg_sales = 0.0
     agg_comm = 0.0
+    agg_shopper_tax = 0.0  # Accumulate taxes paid by shopper
     total_items_created = 0
     
     # Build quantities list - default to 1 for each client if not provided
@@ -5411,6 +5416,7 @@ async def create_live_module_purchases(data: LiveModulePurchaseCreate, current_u
                 "price_with_tax": price_with_tax,
                 "commission": commission_fee,
                 "apply_commission": commission_fee > 0,
+                "shopper_tax": shopper_tax,  # Tax paid by personal shopper
                 "total": total,
                 "status": "confirmed",
                 "live_id": data.live_id,
@@ -5420,6 +5426,7 @@ async def create_live_module_purchases(data: LiveModulePurchaseCreate, current_u
             await db.purchases.insert_one(purchase_dict)
             agg_sales += price_with_tax
             agg_comm += commission_fee
+            agg_shopper_tax += shopper_tax  # Accumulate shopper tax
             total_items_created += 1
         
         # Update wallet once with total for all items
@@ -5438,7 +5445,7 @@ async def create_live_module_purchases(data: LiveModulePurchaseCreate, current_u
 
     if created:
         await db.lives.update_one({"id": data.live_id, "tenant_id": tid},
-            {"$inc": {"total_sales": round(agg_sales, 2), "total_commissions": round(agg_comm, 2), "purchase_count": total_items_created}})
+            {"$inc": {"total_sales": round(agg_sales, 2), "total_commissions": round(agg_comm, 2), "total_taxes_paid": round(agg_shopper_tax, 2), "purchase_count": total_items_created}})
         # Save product name to history for autocomplete (name only).
         name_clean = data.item_name.strip()
         if name_clean:
@@ -5454,7 +5461,8 @@ async def create_live_module_purchases(data: LiveModulePurchaseCreate, current_u
             entity_type="live", entity_id=data.live_id,
             entity_name=f"{data.item_name} x{len(created)}",
             details={"item_name": data.item_name, "price": price, "commission": commission_fee,
-                     "total": total, "clients": len(created), "customer_ids": [c["customer_id"] for c in created]}
+                     "shopper_tax": shopper_tax, "total": total, "clients": len(created), 
+                     "customer_ids": [c["customer_id"] for c in created]}
         )
 
     return {
@@ -5464,6 +5472,7 @@ async def create_live_module_purchases(data: LiveModulePurchaseCreate, current_u
         "unit_total": total,
         "price": price,
         "commission": commission_fee,
+        "shopper_tax": shopper_tax,
     }
 
 
@@ -8227,6 +8236,14 @@ async def get_reports_summary(
         {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$commission", 0]}}}}
     ]).to_list(1)
     total_commissions = total_commissions_agg if total_commissions_agg else []
+    
+    # Shopper taxes = sum of `shopper_tax` per purchase in the period.
+    # These are taxes PAID BY THE PERSONAL SHOPPER that reduce their net profit.
+    total_shopper_taxes_agg = await db.purchases.aggregate([
+        {"$match": purchase_match},
+        {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$shopper_tax", 0]}}}}
+    ]).to_list(1)
+    total_shopper_taxes = total_shopper_taxes_agg[0]["total"] if total_shopper_taxes_agg else 0
     client_count = await db.users.count_documents({"role": "client", "tenant_id": tid})
     live_count = await db.lives.count_documents({"tenant_id": tid, **date_filter})
     pending_shipments = await db.shipments.count_documents({"status": {"$ne": "delivered"}, "tenant_id": tid})
@@ -8300,6 +8317,7 @@ async def get_reports_summary(
     return {
         "total_sales": total_sales[0]["total"] if total_sales else 0,
         "total_commissions": total_commissions[0]["total"] if total_commissions else 0,
+        "total_shopper_taxes": round(total_shopper_taxes, 2),
         "client_count": client_count, "live_count": live_count,
         "pending_shipments": pending_shipments,
         "total_shipping": total_shipping[0]["total"] if total_shipping else 0,
@@ -8440,6 +8458,7 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
             "total_price": {"$sum": "$price"},
             "total_tax": {"$sum": "$tax"},
             "total_commission": {"$sum": "$commission"},
+            "total_shopper_tax": {"$sum": {"$ifNull": ["$shopper_tax", 0]}},
             "total_revenue": {"$sum": "$total"},
             "purchase_count": {"$sum": 1}
         }}
@@ -8480,6 +8499,7 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
             "store": 1,
             "total_sales": 1,
             "total_commissions": 1,
+            "total_taxes_paid": 1,
             "purchase_count": 1,
             "status": 1,
             "created_at": 1
@@ -8532,19 +8552,23 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
         }}
     ]).to_list(1)
     
-    revenue = revenue_stats[0] if revenue_stats else {"total_price": 0, "total_tax": 0, "total_commission": 0, "total_revenue": 0, "purchase_count": 0}
+    revenue = revenue_stats[0] if revenue_stats else {"total_price": 0, "total_tax": 0, "total_commission": 0, "total_shopper_tax": 0, "total_revenue": 0, "purchase_count": 0}
     shipping = shipping_stats[0] if shipping_stats else {"total_shipping": 0, "total_weight": 0, "shipment_count": 0}
     deposits = deposits_stats[0] if deposits_stats else {"total_deposits": 0, "deposit_count": 0}
     wallets = wallet_stats[0] if wallet_stats else {"total_balance": 0, "wallet_count": 0}
     
-    # Calculate profit (commissions only = gross profit for the business)
+    # Calculate profit (commissions - shopper taxes = net profit for the business)
     gross_profit = revenue["total_commission"]
+    shopper_taxes = revenue.get("total_shopper_tax", 0)
+    net_profit = gross_profit - shopper_taxes
     
     return {
         "revenue": {
             "total_product_sales": round(revenue["total_price"], 2),
             "total_tax_collected": round(revenue["total_tax"], 2),
             "total_commissions": round(revenue["total_commission"], 2),
+            "total_shopper_taxes": round(shopper_taxes, 2),
+            "net_profit": round(net_profit, 2),
             "total_charged_to_clients": round(revenue["total_revenue"], 2),
             "total_shipping": round(shipping["total_shipping"], 2),
             "gross_profit": round(gross_profit, 2),
@@ -8562,7 +8586,7 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
             for s in sales_by_store
         ],
         "sales_by_live": [
-            {"name": l.get("title", "N/A"), "store": l.get("store", "N/A"), "ventas": round(l.get("total_sales", 0), 2), "comisiones": round(l.get("total_commissions", 0), 2), "compras": l.get("purchase_count", 0), "status": l.get("status", "inactive")}
+            {"name": l.get("title", "N/A"), "store": l.get("store", "N/A"), "ventas": round(l.get("total_sales", 0), 2), "comisiones": round(l.get("total_commissions", 0), 2), "taxes_pagados": round(l.get("total_taxes_paid", 0), 2), "compras": l.get("purchase_count", 0), "status": l.get("status", "inactive")}
             for l in sales_by_live
         ],
         "sales_trend": [
