@@ -25,6 +25,8 @@ import QRCode from "qrcode";
 export default function StoreInvoiceSection({ live, onUpdate, compact = false }) {
   // Initialize with empty string - only use live value if explicitly set
   const [invoiceAmount, setInvoiceAmount] = useState("");
+  // Tax from store invoice (paid by shopper, reduces commission profit)
+  const [invoiceTax, setInvoiceTax] = useState("");
   // Total physical items the admin bought at the store. Independent from
   // `live.purchase_count` (number of items registered to clients).
   const [invoiceItemsCount, setInvoiceItemsCount] = useState("");
@@ -48,13 +50,19 @@ export default function StoreInvoiceSection({ live, onUpdate, compact = false })
     } else {
       setInvoiceAmount(""); // Reset to empty for new stores without invoice
     }
+    // Tax: keep stored value or reset.
+    if (live?.store_invoice_tax !== undefined && live?.store_invoice_tax !== null && live?.store_invoice_tax !== 0) {
+      setInvoiceTax(live.store_invoice_tax);
+    } else {
+      setInvoiceTax("");
+    }
     // Items count: keep stored value or reset.
     if (live?.store_invoice_items_count !== undefined && live?.store_invoice_items_count !== null) {
       setInvoiceItemsCount(live.store_invoice_items_count);
     } else {
       setInvoiceItemsCount("");
     }
-  }, [live?.id, live?.store_invoice_amount, live?.store_invoice_items_count]);
+  }, [live?.id, live?.store_invoice_amount, live?.store_invoice_tax, live?.store_invoice_items_count]);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -70,6 +78,16 @@ export default function StoreInvoiceSection({ live, onUpdate, compact = false })
       toast.error("Ingresa un monto válido");
       return;
     }
+    // Tax is optional but must be a valid non-negative number when provided
+    let taxToSend = null;
+    if (invoiceTax !== "" && invoiceTax !== null && invoiceTax !== undefined) {
+      const parsedTax = parseFloat(invoiceTax);
+      if (Number.isNaN(parsedTax) || parsedTax < 0) {
+        toast.error("Tax inválido");
+        return;
+      }
+      taxToSend = parsedTax;
+    }
     // items count is optional but must be a valid non-negative integer when provided
     let itemsCountToSend = null;
     if (invoiceItemsCount !== "" && invoiceItemsCount !== null && invoiceItemsCount !== undefined) {
@@ -83,7 +101,7 @@ export default function StoreInvoiceSection({ live, onUpdate, compact = false })
 
     try {
       setSaving(true);
-      await updateStoreInvoice(live.id, parseFloat(invoiceAmount), itemsCountToSend);
+      await updateStoreInvoice(live.id, parseFloat(invoiceAmount), itemsCountToSend, taxToSend);
       toast.success("Factura de tienda guardada");
       if (onUpdate) onUpdate();
     } catch (error) {
@@ -159,10 +177,15 @@ export default function StoreInvoiceSection({ live, onUpdate, compact = false })
     setPolling(false);
   };
 
-  // Calculate profit
+  // Calculate profit (considering store invoice tax reduces commission profit)
   const totalSales = live?.total_sales || 0;
+  const totalCommissions = live?.total_commissions || 0;
+  const totalTaxesPaid = live?.total_taxes_paid || 0;  // Taxes per product
   const storeAmount = parseFloat(invoiceAmount) || 0;
+  const storeTax = parseFloat(invoiceTax) || 0;  // Tax from store invoice
   const profit = totalSales - storeAmount;
+  // Net commission profit = commissions - product taxes - store invoice tax
+  const netCommissionProfit = totalCommissions - totalTaxesPaid - storeTax;
   const hasImage = !!live?.store_invoice_image;
   const hasAmount = live?.store_invoice_amount !== null && live?.store_invoice_amount !== undefined;
 
@@ -195,6 +218,9 @@ export default function StoreInvoiceSection({ live, onUpdate, compact = false })
             <div className={`text-right ${profit >= 0 ? "text-green-300" : "text-red-300"}`}>
               <p className="text-[10px] opacity-70 leading-tight">Ganancia</p>
               <p className="text-xs font-bold leading-tight">{profit >= 0 ? "+" : ""}${profit.toFixed(2)}</p>
+              {storeTax > 0 && (
+                <p className="text-[9px] text-amber-300 leading-tight">Tax: -${storeTax.toFixed(2)}</p>
+              )}
             </div>
           )}
           {hasImage && <CheckCircle className="h-3.5 w-3.5 text-green-300 shrink-0" />}
@@ -242,6 +268,30 @@ export default function StoreInvoiceSection({ live, onUpdate, compact = false })
                 </div>
               </div>
 
+              {/* Tax Input - Store invoice tax paid by shopper */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                  Tax de la Factura
+                </label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-amber-500" />
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={invoiceTax}
+                    onChange={(e) => setInvoiceTax(e.target.value)}
+                    onWheel={(e) => e.target.blur()}
+                    className="pl-10 h-12 font-medium border-amber-200 focus:border-amber-400"
+                    data-testid="store-invoice-tax"
+                  />
+                </div>
+                <p className="text-[11px] text-amber-600 mt-1">
+                  Este tax lo asume la personal shopper y se resta de las ganancias de comisiones.
+                </p>
+              </div>
+
               {/* Items Count Input — admin-entered, independent from purchase_count */}
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">
@@ -271,14 +321,33 @@ export default function StoreInvoiceSection({ live, onUpdate, compact = false })
 
               {/* Profit */}
               {hasAmount && (
-                <div className={`p-3 rounded-xl flex items-center justify-between ${profit >= 0 ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
-                  <div>
-                    <p className="text-sm text-gray-600">Ganancia</p>
-                    <p className="text-xs text-gray-500">(Ventas ${totalSales.toFixed(2)} - Factura ${storeAmount.toFixed(2)})</p>
+                <div className="space-y-2">
+                  <div className={`p-3 rounded-xl flex items-center justify-between ${profit >= 0 ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+                    <div>
+                      <p className="text-sm text-gray-600">Ganancia Bruta</p>
+                      <p className="text-xs text-gray-500">(Ventas ${totalSales.toFixed(2)} - Factura ${storeAmount.toFixed(2)})</p>
+                    </div>
+                    <span className={`text-2xl font-bold ${profit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                      ${profit.toFixed(2)}
+                    </span>
                   </div>
-                  <span className={`text-2xl font-bold ${profit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                    ${profit.toFixed(2)}
-                  </span>
+                  
+                  {/* Commission Profit with Taxes */}
+                  {(totalCommissions > 0 || storeTax > 0 || totalTaxesPaid > 0) && (
+                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-medium text-amber-800">Ganancia Neta Comisiones</p>
+                        <span className={`text-xl font-bold ${netCommissionProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                          ${netCommissionProfit.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="text-xs text-amber-700 space-y-0.5">
+                        <p>Comisiones: +${totalCommissions.toFixed(2)}</p>
+                        {totalTaxesPaid > 0 && <p>Taxes por producto: -${totalTaxesPaid.toFixed(2)}</p>}
+                        {storeTax > 0 && <p>Tax factura tienda: -${storeTax.toFixed(2)}</p>}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -89,9 +89,10 @@ export const reassignPurchaseLive = (purchaseId, liveId) => api.post(`/purchases
 export const getLive = (liveId) => api.get(`/lives/${liveId}`);
 export const createLiveModulePurchases = (data) => api.post("/live-module/purchases", data);
 export const getProductHistory = (q) => api.get("/live-module/product-history", { params: { q } });
-export const updateStoreInvoice = (liveId, amount, itemsCount) => api.put(`/lives/${liveId}/store-invoice`, {
+export const updateStoreInvoice = (liveId, amount, itemsCount, invoiceTax) => api.put(`/lives/${liveId}/store-invoice`, {
   store_invoice_amount: amount,
   ...(itemsCount !== undefined && itemsCount !== null && itemsCount !== "" ? { store_invoice_items_count: itemsCount } : {}),
+  ...(invoiceTax !== undefined && invoiceTax !== null && invoiceTax !== "" ? { store_invoice_tax: invoiceTax } : {}),
 });
 export const uploadStoreInvoiceImage = (liveId, formData) => api.post(`/lives/${liveId}/store-invoice/upload`, formData, { headers: { "Content-Type": "multipart/form-data" } });
 export const generateUploadQR = (liveId) => api.post(`/lives/${liveId}/generate-upload-qr`);

@@ -366,10 +366,11 @@ class Live(BaseModel):
     ended_at: Optional[str] = None
     total_sales: float = 0.0
     total_commissions: float = 0.0
-    total_taxes_paid: float = 0.0  # Taxes paid by personal shopper (reduces net profit)
+    total_taxes_paid: float = 0.0  # Taxes paid by personal shopper per product (reduces net profit)
     purchase_count: int = 0
     # Store invoice fields (for profit calculation)
     store_invoice_amount: Optional[float] = None  # What was actually paid to the store
+    store_invoice_tax: Optional[float] = None     # Tax from store invoice (paid by shopper, reduces profit)
     store_invoice_image: Optional[str] = None     # URL of the store invoice/receipt image
     # Total items physically purchased at the store (admin-entered, may differ
     # from `purchase_count` which counts client-assigned items).
@@ -5020,7 +5021,7 @@ async def end_live(live_id: str, current_user: dict = Depends(get_current_user))
 
 @api_router.put("/lives/{live_id}/store-invoice")
 async def update_store_invoice(live_id: str, data: dict, current_user: dict = Depends(get_current_user)):
-    """Update store invoice amount and calculate profit"""
+    """Update store invoice amount, tax, and calculate profit"""
     if current_user["role"] not in ["admin", "employee"]:
         raise HTTPException(status_code=403, detail="No autorizado")
     
@@ -5032,6 +5033,17 @@ async def update_store_invoice(live_id: str, data: dict, current_user: dict = De
     store_amount = float(data.get("store_invoice_amount", 0))
     if store_amount < 0:
         raise HTTPException(status_code=400, detail="El monto debe ser mayor o igual a 0")
+
+    # Store invoice tax (paid by shopper, reduces profit)
+    store_tax_raw = data.get("store_invoice_tax")
+    store_tax = 0.0
+    if store_tax_raw is not None and store_tax_raw != "":
+        try:
+            store_tax = float(store_tax_raw)
+            if store_tax < 0:
+                raise HTTPException(status_code=400, detail="El tax debe ser mayor o igual a 0")
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Tax inválido")
 
     # Optional: total physical items purchased at the store (admin-entered).
     # Useful when the admin bought e.g. 30 items at the store but only 25 went to
@@ -5052,6 +5064,7 @@ async def update_store_invoice(live_id: str, data: dict, current_user: dict = De
 
     update_set = {
         "store_invoice_amount": store_amount,
+        "store_invoice_tax": store_tax,
         "store_profit": profit,
     }
     if items_count is not None:
@@ -5065,6 +5078,7 @@ async def update_store_invoice(live_id: str, data: dict, current_user: dict = De
     return {
         "message": "Monto actualizado",
         "store_invoice_amount": store_amount,
+        "store_invoice_tax": store_tax,
         "store_invoice_items_count": items_count if items_count is not None else live.get("store_invoice_items_count"),
         "total_sales": total_sales,
         "store_profit": profit
@@ -8500,6 +8514,7 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
             "total_sales": 1,
             "total_commissions": 1,
             "total_taxes_paid": 1,
+            "store_invoice_tax": 1,
             "purchase_count": 1,
             "status": 1,
             "created_at": 1
@@ -8552,15 +8567,26 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
         }}
     ]).to_list(1)
     
+    # Store invoice taxes (from Lives - paid by shopper)
+    live_tax_match = {"tenant_id": tid}
+    if date_filter:
+        live_tax_match.update(date_filter)
+    store_invoice_taxes_agg = await db.lives.aggregate([
+        {"$match": live_tax_match},
+        {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$store_invoice_tax", 0]}}}}
+    ]).to_list(1)
+    store_invoice_taxes = store_invoice_taxes_agg[0]["total"] if store_invoice_taxes_agg else 0
+    
     revenue = revenue_stats[0] if revenue_stats else {"total_price": 0, "total_tax": 0, "total_commission": 0, "total_shopper_tax": 0, "total_revenue": 0, "purchase_count": 0}
     shipping = shipping_stats[0] if shipping_stats else {"total_shipping": 0, "total_weight": 0, "shipment_count": 0}
     deposits = deposits_stats[0] if deposits_stats else {"total_deposits": 0, "deposit_count": 0}
     wallets = wallet_stats[0] if wallet_stats else {"total_balance": 0, "wallet_count": 0}
     
-    # Calculate profit (commissions - shopper taxes = net profit for the business)
+    # Calculate profit (commissions - shopper taxes - store invoice taxes = net profit for the business)
     gross_profit = revenue["total_commission"]
     shopper_taxes = revenue.get("total_shopper_tax", 0)
-    net_profit = gross_profit - shopper_taxes
+    # Net profit = commissions - product taxes - store invoice taxes
+    net_profit = gross_profit - shopper_taxes - store_invoice_taxes
     
     return {
         "revenue": {
@@ -8568,6 +8594,7 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
             "total_tax_collected": round(revenue["total_tax"], 2),
             "total_commissions": round(revenue["total_commission"], 2),
             "total_shopper_taxes": round(shopper_taxes, 2),
+            "total_store_invoice_taxes": round(store_invoice_taxes, 2),
             "net_profit": round(net_profit, 2),
             "total_charged_to_clients": round(revenue["total_revenue"], 2),
             "total_shipping": round(shipping["total_shipping"], 2),
@@ -8586,7 +8613,7 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
             for s in sales_by_store
         ],
         "sales_by_live": [
-            {"name": l.get("title", "N/A"), "store": l.get("store", "N/A"), "ventas": round(l.get("total_sales", 0), 2), "comisiones": round(l.get("total_commissions", 0), 2), "taxes_pagados": round(l.get("total_taxes_paid", 0), 2), "compras": l.get("purchase_count", 0), "status": l.get("status", "inactive")}
+            {"name": l.get("title", "N/A"), "store": l.get("store", "N/A"), "ventas": round(l.get("total_sales", 0), 2), "comisiones": round(l.get("total_commissions", 0), 2), "taxes_pagados": round(l.get("total_taxes_paid", 0), 2), "tax_factura": round(l.get("store_invoice_tax", 0), 2), "compras": l.get("purchase_count", 0), "status": l.get("status", "inactive")}
             for l in sales_by_live
         ],
         "sales_trend": [

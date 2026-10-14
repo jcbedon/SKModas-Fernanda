@@ -338,9 +338,10 @@ export default function AdminStats() {
               <TrendingUp className="h-5 w-5 text-yellow-600 mb-2" />
               <p className="text-2xl font-extrabold text-yellow-700">{formatMoney(rev.total_commissions)}</p>
               <p className="text-xs text-yellow-600">Comisiones</p>
-              {(rev.total_shopper_taxes || 0) > 0 && (
+              {((rev.total_shopper_taxes || 0) > 0 || (rev.total_store_invoice_taxes || 0) > 0) && (
                 <div className="mt-1 pt-1 border-t border-yellow-300/50">
-                  <p className="text-xs text-amber-600">-{formatMoney(rev.total_shopper_taxes)} taxes</p>
+                  {(rev.total_shopper_taxes || 0) > 0 && <p className="text-xs text-amber-600">-{formatMoney(rev.total_shopper_taxes)} taxes prod</p>}
+                  {(rev.total_store_invoice_taxes || 0) > 0 && <p className="text-xs text-amber-600">-{formatMoney(rev.total_store_invoice_taxes)} taxes fact</p>}
                   <p className="text-sm font-bold text-green-600">Neto: {formatMoney(rev.net_profit)}</p>
                 </div>
               )}
@@ -427,12 +428,15 @@ export default function AdminStats() {
                   <div className="flex justify-between py-2 border-b"><span className="text-gray-600">Tax Cobrado</span><span className="font-bold">{formatMoney(rev.total_tax_collected)}</span></div>
                   <div className="flex justify-between py-2 border-b"><span className="text-gray-600">Comisiones</span><span className="font-bold text-yellow-600">{formatMoney(rev.total_commissions)}</span></div>
                   {(rev.total_shopper_taxes || 0) > 0 && (
-                    <div className="flex justify-between py-2 border-b"><span className="text-gray-600">Taxes Pagados (Shopper)</span><span className="font-bold text-amber-600">-{formatMoney(rev.total_shopper_taxes)}</span></div>
+                    <div className="flex justify-between py-2 border-b"><span className="text-gray-600">Taxes Productos (Shopper)</span><span className="font-bold text-amber-600">-{formatMoney(rev.total_shopper_taxes)}</span></div>
+                  )}
+                  {(rev.total_store_invoice_taxes || 0) > 0 && (
+                    <div className="flex justify-between py-2 border-b"><span className="text-gray-600">Taxes Facturas Tienda</span><span className="font-bold text-amber-600">-{formatMoney(rev.total_store_invoice_taxes)}</span></div>
                   )}
                   <div className="flex justify-between py-2 border-b"><span className="text-gray-600">Envios</span><span className="font-bold text-purple-600">{formatMoney(rev.total_shipping)}</span></div>
                   <div className="flex justify-between py-3 bg-green-50 rounded-lg px-3">
                     <span className="font-bold text-green-800">GANANCIA NETA</span>
-                    <span className="font-extrabold text-2xl text-green-600">{formatMoney((rev.total_shopper_taxes || 0) > 0 ? rev.net_profit : rev.gross_profit)}</span>
+                    <span className="font-extrabold text-2xl text-green-600">{formatMoney(((rev.total_shopper_taxes || 0) > 0 || (rev.total_store_invoice_taxes || 0) > 0) ? rev.net_profit : rev.gross_profit)}</span>
                   </div>
                 </CardContent>
               </Card>

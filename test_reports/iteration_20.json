@@ -1,0 +1,28 @@
+{
+  "summary": "Tested the Live Shopping shopper tax_amount feature end-to-end on tenant outletsusaec. Backend: 5/5 pytest tests passed covering tax_amount persistence (shopper_tax on purchase), live aggregation (total_taxes_paid), and three stats endpoints (/admin/reports/summary -> total_shopper_taxes, /admin/reports/business-stats -> revenue.total_shopper_taxes & revenue.net_profit = commissions - shopper_taxes, sales_by_live -> taxes_pagados). Frontend: /admin/live-module shows an optional 'Tax (opcional)' input with the required help text 'Se resta de la ganancia', the active-live summary shows all 5 KPIs (Ventas, Total, Comisiones, Taxes Pagados in amber with '-' prefix, Ganancia Neta in green), and the per-unit panel updates to 'Valor unitario $30.00 / Ganancia neta: $2.50' for price 25 + commission 5 + tax 2.50 (matches spec: 5-2.50=2.50). /admin/stats shows the Comisiones card with '$17.00 / -$7.50 taxes / Neto: $9.50', the Desglose de Ingresos lists 'Taxes Pagados (Shopper): -$7.50' (negative/amber) and 'GANANCIA NETA: $9.50' matching commissions - shopper_taxes.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_live_shopper_taxes.py",
+    "/app/test_reports/pytest/live_shopper_taxes.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py keeps growing (>11600 lines) – splitting into routers is overdue. Not blocking.",
+    "LiveModulePurchaseCreate.tax_amount is applied once per unit (shopper_tax field) but the aggregation agg_shopper_tax += shopper_tax runs inside the per-item loop so quantity>1 multiplies it correctly – verified in code (consistent with commission).",
+    "/admin/reports/business-stats revenue block exposes both gross_profit (commissions) and net_profit (commissions - shopper_taxes); naming is good. 'total_shopper_taxes' key is duplicated – also returned by /admin/reports/summary. Could be centralized in a helper to avoid drift.",
+    "Front-end label uses 'Ganancia Neta' on Live summary but 'GANANCIA NETA' (uppercase) on AdminStats Desglose – cosmetic inconsistency only."
+  ],
+  "updated_files": ["/app/backend/tests/test_live_shopper_taxes.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% of critical flows"},
+  "test_credentials": "admin@outletsusaec.com / 123456 ; test client M5358 (Maria Lopez)",
+  "seed_data_creation": "Created test lives 'TEST_shopper_tax_*' with two shopper-tax purchases (TEST_UI_Tax price 25/comm 5/tax 2.50 and TEST_NOTAX price 10/comm 1/tax 0) on M5358. Not auto-cleaned; wallet decrements accordingly.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Shopper tax feature is working. Regression file /app/backend/tests/test_live_shopper_taxes.py creates test lives via POST /lives and shopper-tax purchases via POST /live-module/purchases on tenant outletsusaec (M5358/J2934 as test customer). Important mapping discovered: 'stats endpoint' = /api/admin/reports/summary (returns total_shopper_taxes), 'admin stats endpoint' = /api/admin/reports/business-stats (returns revenue.total_shopper_taxes, revenue.net_profit, sales_by_live[*].taxes_pagados).",
+  "rca of the issue": "N/A – no defects found. All 5 feature requirements validated."
+}
