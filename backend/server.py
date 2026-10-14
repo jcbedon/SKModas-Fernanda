@@ -8582,18 +8582,18 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
     deposits = deposits_stats[0] if deposits_stats else {"total_deposits": 0, "deposit_count": 0}
     wallets = wallet_stats[0] if wallet_stats else {"total_balance": 0, "wallet_count": 0}
     
-    # Calculate profit (commissions - shopper taxes - store invoice taxes = net profit for the business)
+    # Calculate profit (commissions - store invoice taxes = net profit for the business)
+    # Note: shopper_taxes (per product) is charged to the CLIENT, not the shopper
+    # Only store_invoice_taxes are paid by the shopper and reduce their profit
     gross_profit = revenue["total_commission"]
-    shopper_taxes = revenue.get("total_shopper_tax", 0)
-    # Net profit = commissions - product taxes - store invoice taxes
-    net_profit = gross_profit - shopper_taxes - store_invoice_taxes
+    # Net profit = commissions - store invoice taxes (taxes shopper paid at the store)
+    net_profit = gross_profit - store_invoice_taxes
     
     return {
         "revenue": {
             "total_product_sales": round(revenue["total_price"], 2),
             "total_tax_collected": round(revenue["total_tax"], 2),
             "total_commissions": round(revenue["total_commission"], 2),
-            "total_shopper_taxes": round(shopper_taxes, 2),
             "total_store_invoice_taxes": round(store_invoice_taxes, 2),
             "net_profit": round(net_profit, 2),
             "total_charged_to_clients": round(revenue["total_revenue"], 2),

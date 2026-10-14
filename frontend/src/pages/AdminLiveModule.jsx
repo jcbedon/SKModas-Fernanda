@@ -445,15 +445,6 @@ export default function AdminLiveModule() {
                 <div><p className="text-[11px] opacity-70">Ventas</p><p className="text-lg font-bold leading-tight">{selectedLive.purchase_count || 0}</p></div>
                 <div><p className="text-[11px] opacity-70">Total</p><p className="text-lg font-bold leading-tight">{formatMoney(selectedLive.total_sales)}</p></div>
                 <div><p className="text-[11px] opacity-70">Comisiones</p><p className="text-lg font-bold leading-tight">{formatMoney(selectedLive.total_commissions)}</p></div>
-                {(selectedLive.total_taxes_paid || 0) > 0 && (
-                  <div><p className="text-[11px] opacity-70">Taxes Pagados</p><p className="text-lg font-bold leading-tight text-amber-300">-{formatMoney(selectedLive.total_taxes_paid)}</p></div>
-                )}
-                <div className="border-l border-white/30 pl-5">
-                  <p className="text-[11px] opacity-70">Ganancia Neta</p>
-                  <p className="text-lg font-bold leading-tight text-emerald-300">
-                    {formatMoney((selectedLive.total_commissions || 0) - (selectedLive.total_taxes_paid || 0))}
-                  </p>
-                </div>
               </div>
             </CardContent>
           </Card>
