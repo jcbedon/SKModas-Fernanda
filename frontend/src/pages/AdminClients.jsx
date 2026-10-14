@@ -512,16 +512,6 @@ https://didiershop.live/`;
                     </p>
                   </div>
                 </div>
-                <div>
-                  <Label>Email de Cliente (opcional)</Label>
-                  <Input type="email" placeholder="cliente@email.com" className="rounded-xl mt-1"
-                    value={newClient.email} 
-                    onChange={(e) => setNew("email", e.target.value)} 
-                    onBlur={checkForDuplicates}
-                    autoComplete="off"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Puedes dejarlo vacío si no lo tienes</p>
-                </div>
 
                 {/* Duplicate Warning */}
                 {duplicateWarning && duplicateWarning.length > 0 && (
