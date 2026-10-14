@@ -246,23 +246,6 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <label className="cursor-pointer" data-testid="upload-logo-btn">
-              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const formData = new FormData();
-                formData.append("file", file);
-                try {
-                  const res = await uploadTenantLogo(formData);
-                  const fullUrl = `${process.env.REACT_APP_BACKEND_URL}${res.data.logo_url}`;
-                  updateTenantLogo(fullUrl);
-                  toast.success("Logo actualizado");
-                } catch { toast.error("Error al subir logo"); }
-              }} />
-              <div className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-100">
-                <Upload className="h-3 w-3" /> Logo
-              </div>
-            </label>
             <Button 
               variant="ghost" 
               size="sm" 

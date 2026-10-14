@@ -475,7 +475,7 @@ export default function LoginPage() {
                 </div>
               </div>
               <div className="text-xs" style={{ color: '#6B7280' }}>
-                © {new Date().getFullYear()} Outlets USA EC LLC. All rights reserved.
+                © {new Date().getFullYear()} Didier Shop. All rights reserved.
               </div>
             </div>
           </div>
