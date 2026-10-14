@@ -5058,9 +5058,10 @@ async def update_store_invoice(live_id: str, data: dict, current_user: dict = De
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="Cantidad inválida")
 
-    # Calculate profit: total_sales (includes taxes and commissions) - store_invoice_amount
+    # Calculate profit: total_sales - store_invoice_amount - store_invoice_tax
+    # Ganancia = Total del Live - Factura Tienda - Tax
     total_sales = live.get("total_sales", 0)
-    profit = total_sales - store_amount
+    profit = total_sales - store_amount - store_tax
 
     update_set = {
         "store_invoice_amount": store_amount,

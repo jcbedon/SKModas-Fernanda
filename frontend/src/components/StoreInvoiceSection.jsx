@@ -177,15 +177,13 @@ export default function StoreInvoiceSection({ live, onUpdate, compact = false })
     setPolling(false);
   };
 
-  // Calculate profit (considering store invoice tax reduces commission profit)
+  // Calculate profit: Total del Live - Factura Tienda - Tax
   const totalSales = live?.total_sales || 0;
   const totalCommissions = live?.total_commissions || 0;
-  const totalTaxesPaid = live?.total_taxes_paid || 0;  // Taxes per product
   const storeAmount = parseFloat(invoiceAmount) || 0;
-  const storeTax = parseFloat(invoiceTax) || 0;  // Tax from store invoice
-  const profit = totalSales - storeAmount;
-  // Net commission profit = commissions - product taxes - store invoice tax
-  const netCommissionProfit = totalCommissions - totalTaxesPaid - storeTax;
+  const storeTax = parseFloat(invoiceTax) || 0;  // Tax from store invoice (paid by shopper)
+  // Ganancia = Total ventas - Factura tienda - Tax de la factura
+  const profit = totalSales - storeAmount - storeTax;
   const hasImage = !!live?.store_invoice_image;
   const hasAmount = live?.store_invoice_amount !== null && live?.store_invoice_amount !== undefined;
 
@@ -218,9 +216,6 @@ export default function StoreInvoiceSection({ live, onUpdate, compact = false })
             <div className={`text-right ${profit >= 0 ? "text-green-300" : "text-red-300"}`}>
               <p className="text-[10px] opacity-70 leading-tight">Ganancia</p>
               <p className="text-xs font-bold leading-tight">{profit >= 0 ? "+" : ""}${profit.toFixed(2)}</p>
-              {storeTax > 0 && (
-                <p className="text-[9px] text-amber-300 leading-tight">Tax: -${storeTax.toFixed(2)}</p>
-              )}
             </div>
           )}
           {hasImage && <CheckCircle className="h-3.5 w-3.5 text-green-300 shrink-0" />}
@@ -321,33 +316,16 @@ export default function StoreInvoiceSection({ live, onUpdate, compact = false })
 
               {/* Profit */}
               {hasAmount && (
-                <div className="space-y-2">
-                  <div className={`p-3 rounded-xl flex items-center justify-between ${profit >= 0 ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
-                    <div>
-                      <p className="text-sm text-gray-600">Ganancia Bruta</p>
-                      <p className="text-xs text-gray-500">(Ventas ${totalSales.toFixed(2)} - Factura ${storeAmount.toFixed(2)})</p>
-                    </div>
-                    <span className={`text-2xl font-bold ${profit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                      ${profit.toFixed(2)}
-                    </span>
+                <div className={`p-3 rounded-xl flex items-center justify-between ${profit >= 0 ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+                  <div>
+                    <p className="text-sm text-gray-600">Ganancia</p>
+                    <p className="text-xs text-gray-500">
+                      Ventas ${totalSales.toFixed(2)} - Factura ${storeAmount.toFixed(2)}{storeTax > 0 ? ` - Tax ${storeTax.toFixed(2)}` : ''}
+                    </p>
                   </div>
-                  
-                  {/* Commission Profit with Taxes */}
-                  {(totalCommissions > 0 || storeTax > 0 || totalTaxesPaid > 0) && (
-                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-medium text-amber-800">Ganancia Neta Comisiones</p>
-                        <span className={`text-xl font-bold ${netCommissionProfit >= 0 ? "text-green-600" : "text-red-600"}`}>
-                          ${netCommissionProfit.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="text-xs text-amber-700 space-y-0.5">
-                        <p>Comisiones: +${totalCommissions.toFixed(2)}</p>
-                        {totalTaxesPaid > 0 && <p>Taxes por producto: -${totalTaxesPaid.toFixed(2)}</p>}
-                        {storeTax > 0 && <p>Tax factura tienda: -${storeTax.toFixed(2)}</p>}
-                      </div>
-                    </div>
-                  )}
+                  <span className={`text-2xl font-bold ${profit >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    ${profit.toFixed(2)}
+                  </span>
                 </div>
               )}
 
