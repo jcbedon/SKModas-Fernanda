@@ -11571,14 +11571,14 @@ async def delete_paca(paca_id: str, user=Depends(get_current_user)):
 # ==================== ADMIN DATABASE CLEANUP ====================
 @api_router.post("/admin/cleanup-database")
 async def cleanup_database(user=Depends(get_current_user)):
-    """Clean all data except employees and tenants - ADMIN ONLY"""
+    """Clean all data except employees, tenants and admin users - ADMIN ONLY"""
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Solo administradores pueden limpiar la base de datos")
     
     tenant_id = user["tenant_id"]
     
+    # Collections to clean completely
     collections_to_clean = [
-        "users",           # Clientes
         "invoices",        # Facturas
         "purchases",       # Compras
         "products",        # Productos (legacy)
@@ -11607,6 +11607,17 @@ async def cleanup_database(user=Depends(get_current_user)):
             total_deleted += result.deleted_count
         except Exception as e:
             results[collection_name] = f"Error: {str(e)}"
+    
+    # Clean users BUT preserve admin users (role=admin)
+    try:
+        users_result = await db.users.delete_many({
+            "tenant_id": tenant_id,
+            "role": {"$ne": "admin"}  # NO borrar admins
+        })
+        results["users (clientes)"] = users_result.deleted_count
+        total_deleted += users_result.deleted_count
+    except Exception as e:
+        results["users"] = f"Error: {str(e)}"
     
     # Log the cleanup action
     await log_audit_action(
