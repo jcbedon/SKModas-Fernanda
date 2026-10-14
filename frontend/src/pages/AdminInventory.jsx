@@ -61,7 +61,8 @@ const LOCATION_CONFIG = {
     flag: "https://flagcdn.com/w40/ec.png",
     otherLocation: "usa",
     otherFlag: "https://flagcdn.com/w40/us.png",
-    otherName: "USA"
+    otherName: "USA",
+    backPath: "/admin/inventory"
   },
   usa: {
     name: "USA",
@@ -72,15 +73,64 @@ const LOCATION_CONFIG = {
     flag: "https://flagcdn.com/w40/us.png",
     otherLocation: "ecuador",
     otherFlag: "https://flagcdn.com/w40/ec.png",
-    otherName: "Ecuador"
+    otherName: "Ecuador",
+    backPath: "/admin/inventory"
+  },
+  // Sub-inventarios de Ecuador
+  bodega: {
+    name: "Bodega",
+    fullName: "Ecuador - Bodega",
+    color: "from-amber-50 to-amber-100",
+    borderColor: "border-amber-200",
+    textColor: "text-amber-700",
+    bgColor: "bg-amber-600",
+    flag: "https://flagcdn.com/w40/ec.png",
+    isEcuadorSub: true,
+    backPath: "/admin/inventory/ecuador",
+    transferTargets: ["local", "ali", "usa"]
+  },
+  local: {
+    name: "Local",
+    fullName: "Ecuador - Local",
+    color: "from-emerald-50 to-emerald-100",
+    borderColor: "border-emerald-200",
+    textColor: "text-emerald-700",
+    bgColor: "bg-emerald-600",
+    flag: "https://flagcdn.com/w40/ec.png",
+    isEcuadorSub: true,
+    backPath: "/admin/inventory/ecuador",
+    transferTargets: ["bodega", "ali", "usa"]
+  },
+  ali: {
+    name: "Ali",
+    fullName: "Ecuador - Ali",
+    color: "from-orange-50 to-orange-100",
+    borderColor: "border-orange-200",
+    textColor: "text-orange-700",
+    bgColor: "bg-orange-600",
+    flag: "https://flagcdn.com/w40/ec.png",
+    isEcuadorSub: true,
+    backPath: "/admin/inventory/ecuador",
+    transferTargets: ["bodega", "local", "usa"]
   }
+};
+
+const TRANSFER_TARGET_NAMES = {
+  bodega: { name: "Bodega", icon: "🏭" },
+  local: { name: "Local", icon: "🏪" },
+  ali: { name: "Ali", icon: "📦" },
+  usa: { name: "USA", icon: "🇺🇸" }
 };
 
 export default function AdminInventory() {
   const navigate = useNavigate();
-  const { location } = useParams();
+  const { location, subLocation } = useParams();
   const { user } = useAuth();
   const logoUrl = user?.tenant_logo || DEFAULT_LOGO;
+  
+  // Determinar la ubicación efectiva (para sub-inventarios de Ecuador)
+  const effectiveLocation = subLocation || location;
+  const isEcuadorSub = ["bodega", "local", "ali"].includes(effectiveLocation);
   
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
@@ -112,7 +162,8 @@ export default function AdminInventory() {
   const [transferForm, setTransferForm] = useState({
     quantity: "1",
     targetProductId: "",
-    createNew: false
+    createNew: false,
+    targetLocation: ""
   });
   
   // Form states
@@ -139,23 +190,29 @@ export default function AdminInventory() {
     reason: ""
   });
 
-  const config = LOCATION_CONFIG[location] || LOCATION_CONFIG.ecuador;
+  const config = LOCATION_CONFIG[effectiveLocation] || LOCATION_CONFIG.bodega;
+  const validLocations = ["ecuador", "usa", "bodega", "local", "ali"];
 
   useEffect(() => {
-    if (!location || !["ecuador", "usa"].includes(location)) {
+    // Redirigir ecuador sin sub-ubicación al selector
+    if (location === "ecuador" && !subLocation) {
       navigate("/admin/inventory/ecuador");
+      return;
+    }
+    if (!effectiveLocation || !validLocations.includes(effectiveLocation)) {
+      navigate("/admin/inventory");
       return;
     }
     loadData();
     loadLowStockAlerts();
-  }, [location]);
+  }, [effectiveLocation]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [productsRes, salesRes] = await Promise.all([
-        getInventoryProducts(location),
-        getInventorySales(location)
+        getInventoryProducts(effectiveLocation),
+        getInventorySales(effectiveLocation)
       ]);
       setProducts(productsRes.data || []);
       setSales(salesRes.data || []);
@@ -168,7 +225,7 @@ export default function AdminInventory() {
 
   const loadLowStockAlerts = async () => {
     try {
-      const res = await getLowStockAlerts(5, location);
+      const res = await getLowStockAlerts(5, effectiveLocation);
       setLowStockAlerts(res.data?.products || []);
     } catch (e) {
       console.error("Error loading alerts:", e);
@@ -184,20 +241,11 @@ export default function AdminInventory() {
     }
   };
 
-  const loadTargetProducts = async () => {
-    try {
-      const res = await getProductsForTransfer(config.otherLocation);
-      setTargetProducts(res.data || []);
-    } catch (e) {
-      console.error("Error loading target products:", e);
-    }
-  };
-
   // Product CRUD
   const openNewProduct = () => {
     setEditingProduct(null);
-    // Default tax: Ecuador = 15%, USA = Sin impuestos
-    const defaultTax = location === "ecuador" ? "15" : "sin";
+    // Default tax: Ecuador/subs = 15%, USA = Sin impuestos
+    const defaultTax = effectiveLocation === "usa" ? "sin" : "15";
     setTaxOption(defaultTax);
     setProductForm({
       name: "",
@@ -258,7 +306,7 @@ export default function AdminInventory() {
     }
 
     const data = {
-      location: location,
+      location: effectiveLocation,
       name: productForm.name,
       cost: parseFloat(productForm.cost),
       sale_price: parseFloat(productForm.sale_price),
@@ -352,9 +400,21 @@ export default function AdminInventory() {
   // Transfer
   const openTransferDialog = (product) => {
     setTransferProduct(product);
-    setTransferForm({ quantity: "1", targetProductId: "", createNew: false });
-    loadTargetProducts();
+    // Determinar el primer destino por defecto basado en la ubicación actual
+    const targets = config.transferTargets || [config.otherLocation];
+    const defaultTarget = targets[0] || "usa";
+    setTransferForm({ quantity: "1", targetProductId: "", createNew: false, targetLocation: defaultTarget });
+    loadTargetProducts(defaultTarget);
     setTransferDialog(true);
+  };
+
+  const loadTargetProducts = async (targetLoc) => {
+    try {
+      const res = await getProductsForTransfer(targetLoc || transferForm.targetLocation || config.otherLocation);
+      setTargetProducts(res.data || []);
+    } catch (e) {
+      setTargetProducts([]);
+    }
   };
 
   const handleTransfer = async () => {
@@ -373,7 +433,8 @@ export default function AdminInventory() {
         transferProduct.id,
         qty,
         transferForm.createNew ? null : transferForm.targetProductId,
-        transferForm.createNew
+        transferForm.createNew,
+        transferForm.targetLocation
       );
       toast.success(res.data.message);
       setTransferDialog(false);
@@ -495,12 +556,13 @@ export default function AdminInventory() {
       {/* Header */}
       <div className="bg-white/90 backdrop-blur-sm border-b border-gray-100 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/admin/inventory")} data-testid="back-btn">
+          <Button variant="ghost" size="sm" onClick={() => navigate(config.backPath || "/admin/inventory")} data-testid="back-btn">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <img src={logoUrl} alt="Logo" className="h-10 object-contain" />
           <span className="font-bold text-slate-800 flex items-center gap-2">
-            Inventario <img src={config.flag} alt={config.name} className="h-5 inline-block" /> {config.name}
+            <img src={config.flag} alt={config.name} className="h-5 inline-block" /> 
+            {config.fullName || `Inventario ${config.name}`}
           </span>
           
           {/* Low stock alert badge */}
@@ -531,7 +593,7 @@ export default function AdminInventory() {
               Facturar
             </Button>
             <Button
-              onClick={() => navigate(`/admin/inventory-stats/${location}`)}
+              onClick={() => navigate(`/admin/inventory-stats/${effectiveLocation}`)}
               variant="outline"
               size="sm"
               className="gap-2"
@@ -1029,15 +1091,49 @@ export default function AdminInventory() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              Transferir a <img src={config.otherFlag} alt={config.otherName} className="h-5 inline-block" /> {config.otherName}
+              <ArrowRightLeft className="h-5 w-5 text-purple-600" />
+              Transferir Producto
             </DialogTitle>
           </DialogHeader>
           {transferProduct && (
             <div className="space-y-4 py-4">
               <div className={`bg-gradient-to-br ${config.color} p-3 rounded-lg`}>
                 <p className="font-bold">{transferProduct.name}</p>
-                <p className="text-sm">Stock disponible en {config.name}: {transferProduct.stock || 0}</p>
+                <p className="text-sm">Stock disponible en {config.fullName || config.name}: {transferProduct.stock || 0}</p>
               </div>
+              
+              {/* Destination selector */}
+              <div>
+                <Label className="font-semibold">Destino</Label>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {(config.transferTargets || [config.otherLocation]).map(target => {
+                    const targetInfo = TRANSFER_TARGET_NAMES[target] || { name: target, icon: "📦" };
+                    const isSelected = transferForm.targetLocation === target;
+                    return (
+                      <button
+                        key={target}
+                        type="button"
+                        onClick={() => {
+                          setTransferForm({...transferForm, targetLocation: target, targetProductId: ""});
+                          loadTargetProducts(target);
+                        }}
+                        className={`p-3 rounded-lg border-2 transition-all ${
+                          isSelected 
+                            ? 'border-purple-500 bg-purple-50' 
+                            : 'border-gray-200 hover:border-purple-300'
+                        }`}
+                        data-testid={`transfer-target-${target}`}
+                      >
+                        <span className="text-xl">{targetInfo.icon}</span>
+                        <p className={`text-sm font-medium ${isSelected ? 'text-purple-700' : 'text-gray-700'}`}>
+                          {targetInfo.name}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div>
                 <Label>Cantidad a transferir</Label>
                 <Input type="number" min="1" max={transferProduct.stock || 0} value={transferForm.quantity} onChange={(e) => setTransferForm({...transferForm, quantity: e.target.value})} data-testid="transfer-quantity-input" />
@@ -1048,11 +1144,11 @@ export default function AdminInventory() {
                   checked={transferForm.createNew} 
                   onCheckedChange={(checked) => setTransferForm({...transferForm, createNew: checked, targetProductId: ""})}
                 />
-                <Label htmlFor="create-new" className="cursor-pointer">Crear producto nuevo en {config.otherName}</Label>
+                <Label htmlFor="create-new" className="cursor-pointer">Crear producto nuevo en destino</Label>
               </div>
               {!transferForm.createNew && (
                 <div>
-                  <Label>O seleccionar producto existente en {config.otherName}</Label>
+                  <Label>O seleccionar producto existente</Label>
                   <select
                     value={transferForm.targetProductId}
                     onChange={(e) => setTransferForm({...transferForm, targetProductId: e.target.value})}
@@ -1069,7 +1165,7 @@ export default function AdminInventory() {
               <div className="bg-purple-50 p-3 rounded-lg text-center">
                 <ArrowRightLeft className="h-6 w-6 mx-auto text-purple-600 mb-2" />
                 <p className="text-sm text-purple-700 flex items-center justify-center gap-2">
-                  {transferForm.quantity || 0} unidades de <img src={config.flag} alt={config.name} className="h-4 inline-block" /> {config.name} → <img src={config.otherFlag} alt={config.otherName} className="h-4 inline-block" /> {config.otherName}
+                  {transferForm.quantity || 0} unidades de <strong>{config.fullName || config.name}</strong> → <strong>{TRANSFER_TARGET_NAMES[transferForm.targetLocation]?.name || transferForm.targetLocation}</strong>
                 </p>
               </div>
             </div>

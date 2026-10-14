@@ -10939,11 +10939,13 @@ async def transfer_inventory_stock(
     quantity: int = Body(..., embed=True),
     target_product_id: Optional[str] = Body(None, embed=True),
     create_new: bool = Body(False, embed=True),
+    target_location: Optional[str] = Body(None, embed=True),
     user=Depends(get_current_user)
 ):
     """Transfer stock from one location to another.
     Either specify target_product_id to transfer to existing product,
     or set create_new=True to create a new product in the other location.
+    target_location can be: bodega, local, ali, usa, ecuador
     """
     # Get source product
     source = await db.inventory_products.find_one(
@@ -10956,8 +10958,21 @@ async def transfer_inventory_stock(
     if current_stock < quantity:
         raise HTTPException(status_code=400, detail=f"Stock insuficiente. Disponible: {current_stock}")
     
-    source_location = source.get("location", "ecuador")
-    target_location = "usa" if source_location == "ecuador" else "ecuador"
+    source_location = source.get("location", "bodega")
+    
+    # Determine target location if not provided
+    if not target_location:
+        # Legacy behavior: swap between ecuador/usa
+        if source_location == "usa":
+            target_location = "bodega"  # Default to bodega for USA transfers
+        elif source_location in ["bodega", "local", "ali"]:
+            target_location = "usa"
+        else:
+            target_location = "bodega"
+    
+    # Validate target is different from source
+    if target_location == source_location:
+        raise HTTPException(status_code=400, detail="La ubicación destino debe ser diferente a la origen")
     
     if create_new:
         # Create new product in target location
@@ -11005,6 +11020,15 @@ async def transfer_inventory_stock(
         }
     )
     
+    # Location display names
+    location_names = {
+        "bodega": "Bodega",
+        "local": "Local", 
+        "ali": "Ali",
+        "usa": "USA",
+        "ecuador": "Ecuador"
+    }
+    
     # Log the transfer
     await db.audit_logs.insert_one({
         "id": str(uuid.uuid4()),
@@ -11028,7 +11052,7 @@ async def transfer_inventory_stock(
     })
     
     return {
-        "message": f"Transferencia completada: {quantity} unidades de {source_location.upper()} a {target_location.upper()}",
+        "message": f"Transferencia completada: {quantity} unidades de {location_names.get(source_location, source_location)} a {location_names.get(target_location, target_location)}",
         "source_product": source["name"],
         "target_product": target_name,
         "quantity": quantity,

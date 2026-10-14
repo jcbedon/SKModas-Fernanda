@@ -261,8 +261,8 @@ export const updateInventoryProduct = (productId, data) => api.put(`/inventory/p
 export const deleteInventoryProduct = (productId) => api.delete(`/inventory/products/${productId}`);
 export const adjustInventoryStock = (productId, adjustment, reason) => 
   api.post(`/inventory/products/${productId}/adjust-stock`, { adjustment, reason });
-export const transferInventoryStock = (productId, quantity, targetProductId, createNew) =>
-  api.post(`/inventory/products/${productId}/transfer`, { quantity, target_product_id: targetProductId, create_new: createNew });
+export const transferInventoryStock = (productId, quantity, targetProductId, createNew, targetLocation) =>
+  api.post(`/inventory/products/${productId}/transfer`, { quantity, target_product_id: targetProductId, create_new: createNew, target_location: targetLocation });
 export const getProductsForTransfer = (targetLocation) => 
   api.get("/inventory/products-for-transfer", { params: { target_location: targetLocation } });
 export const getInventorySales = (location, params = {}) => api.get("/inventory/sales", { params: { location, ...params } });

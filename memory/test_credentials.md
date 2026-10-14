@@ -1,8 +1,12 @@
 # Test Credentials
 
-## Admin
+## Admin (Preview/Local)
 - identifier: admin@outletsusaec.com
 - password: 123456
+
+## Admin Producción (didiershop.live)
+- username: didiershop
+- password: Didier2026$
 
 ## Superadmin
 - identifier: superadmin@outletsusaec.com

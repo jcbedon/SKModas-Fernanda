@@ -29,6 +29,7 @@ import AdminInventory from "@/pages/AdminInventory";
 import AdminInventoryStats from "@/pages/AdminInventoryStats";
 import AdminInventorySelect from "@/pages/AdminInventorySelect";
 import AdminInventoryHistory from "@/pages/AdminInventoryHistory";
+import AdminInventoryEcuadorSelect from "@/pages/AdminInventoryEcuadorSelect";
 import AdminPacas from "@/pages/AdminPacas";
 import AdminPacasStats from "@/pages/AdminPacasStats";
 import SuperadminDashboard from "@/pages/SuperadminDashboard";
@@ -229,6 +230,8 @@ function App() {
           <Route path="/admin/deposit-maintenance" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDepositMaintenance /></ProtectedRoute>} />
           <Route path="/admin/inventory" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventorySelect /></ProtectedRoute>} />
           <Route path="/admin/inventory/history" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventoryHistory /></ProtectedRoute>} />
+          <Route path="/admin/inventory/ecuador" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventoryEcuadorSelect /></ProtectedRoute>} />
+          <Route path="/admin/inventory/ecuador/:subLocation" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventory /></ProtectedRoute>} />
           <Route path="/admin/inventory/:location" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventory /></ProtectedRoute>} />
           <Route path="/admin/inventory-stats/:location" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminInventoryStats /></ProtectedRoute>} />
           <Route path="/admin/pacas" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminPacas /></ProtectedRoute>} />
