@@ -1,4 +1,5 @@
 import { useAuth } from "@/App";
+import { useState } from "react";
 
 /**
  * Inline top hero banner used on the main dashboards for every tenant that
@@ -11,6 +12,7 @@ import { useAuth } from "@/App";
 export const AstridHeroBanner = () => {
   const { user } = useAuth();
   const bannerPath = user?.tenant_banner;
+  const [bannerLoaded, setBannerLoaded] = useState(false);
 
   if (!bannerPath) return null;
 
@@ -47,11 +49,13 @@ export const AstridHeroBanner = () => {
       `}</style>
       <div className="tenant-hero" data-testid="tenant-hero-banner" aria-hidden="true">
         <img
-          className="tenant-hero-img"
+          className={`tenant-hero-img transition-opacity duration-200 ${bannerLoaded ? 'opacity-100' : 'opacity-0'}`}
           src={bannerUrl}
           alt=""
           loading="eager"
           decoding="async"
+          fetchPriority="high"
+          onLoad={() => setBannerLoaded(true)}
         />
       </div>
     </>

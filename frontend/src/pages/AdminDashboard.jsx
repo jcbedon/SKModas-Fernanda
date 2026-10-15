@@ -71,6 +71,7 @@ export default function AdminDashboard() {
   const [summary, setSummary] = useState(null);
   const [activeLive, setActiveLive] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [logoLoaded, setLogoLoaded] = useState(false);
   const [dashPeriod, setDashPeriod] = useState("week"); // "week" (current) | "all" | "wN" where N is weeksBack
   const [salesDetailOpen, setSalesDetailOpen] = useState(false);
   const [salesDetailLoading, setSalesDetailLoading] = useState(false);
@@ -237,8 +238,15 @@ export default function AdminDashboard() {
       <div className="bg-white/90 backdrop-blur-sm border-b border-gray-100 sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-white rounded-lg p-1">
-              <img src={logoUrl} alt="Logo" className="h-12 object-contain logo-transparent" loading="eager" fetchpriority="high" />
+            <div className="bg-white rounded-lg p-1 min-w-[48px] min-h-[48px] flex items-center justify-center">
+              <img 
+                src={logoUrl} 
+                alt="Logo" 
+                className={`h-12 object-contain logo-transparent transition-opacity duration-200 ${logoLoaded ? 'opacity-100' : 'opacity-0'}`}
+                loading="eager" 
+                fetchpriority="high"
+                onLoad={() => setLogoLoaded(true)}
+              />
             </div>
             <div className="hidden sm:block">
               <p className="text-sm font-bold text-slate-800">{user?.tenant_name || "Admin"}</p>
