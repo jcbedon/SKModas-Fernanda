@@ -1221,11 +1221,11 @@ export default function AdminLive() {
                           {pendingCount > 0 && (
                             <span
                               className={`ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold border rounded-md ${pendingCls}`}
-                              title={`${pendingCount} compras sin facturar por $${pending.toFixed(2)}`}
+                              title={`${pendingCount} compras sin facturar`}
                               data-testid="selected-client-pending-badge"
                             >
                               <Receipt className="h-3 w-3" />
-                              Por facturar: {pendingCount} items
+                              Por facturar: {pendingCount} items (${pending.toFixed(2)})
                             </span>
                           )}
                         </div>
