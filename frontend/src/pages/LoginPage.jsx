@@ -10,13 +10,13 @@ const WHATSAPP_USA = "+12019954770";
 const WHATSAPP_ECUADOR = "+593998541082";
 
 // Logo URL - Didier Shop logo blanco con fondo transparente
-const DIDIER_LOGO = "/login-logo.png";
+const DIDIER_LOGO = "https://customer-assets-v7afamib.emergentagent.net/job_783f5be0-cb6a-4591-926c-0e17259f2605/artifacts/a2c6d2e7ca48aeaa_Logo%20Didier%20Shop%20%28Blanco%29.png";
 
 // Video URL
 const PROMO_VIDEO = "https://customer-assets-v7afamib.emergentagent.net/job_783f5be0-cb6a-4591-926c-0e17259f2605/artifacts/dbb507bb65a16b55_Woman_holding_shopping_bags_smiling_20261010221028.mp4";
 
 // Modern background image
-const MODERN_BG = "/login-bg.jpeg";
+const MODERN_BG = "https://static.prod-images.emergentagent.com/jobs/783f5be0-cb6a-4591-926c-0e17259f2605/images/d2da390a97bccb7db2448db8fab546a8bc7d5be31cf497a1764845b832513e7c.jpeg";
 
 export default function LoginPage() {
   const navigate = useNavigate();
