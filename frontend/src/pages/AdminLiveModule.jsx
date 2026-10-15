@@ -54,7 +54,7 @@ export default function AdminLiveModule() {
   const [creating, setCreating] = useState(false);
 
   // Product form
-  const [product, setProduct] = useState({ item_name: "", price: "", commission: "", tax_amount: "" });
+  const [product, setProduct] = useState({ item_name: "", price: "", commission: "" });
   const [history, setHistory] = useState([]);
 
   // Clients
@@ -239,14 +239,10 @@ export default function AdminLiveModule() {
 
   const priceNum = parseFloat(product.price) || 0;
   const commissionNum = product.commission === "" ? 0 : (parseFloat(product.commission) || 0);
-  const taxAmountNum = parseFloat(product.tax_amount) || 0;
   const unitValue = priceNum + commissionNum;
   // Calculate total based on each client's quantity
   const totalQuantity = selectedClients.reduce((sum, c) => sum + (c.quantity || 1), 0);
   const finalValue = unitValue * totalQuantity;
-  // Net commission after tax (tax reduces commission/profit)
-  const netCommissionPerUnit = commissionNum - taxAmountNum;
-  const totalNetCommission = netCommissionPerUnit * totalQuantity;
 
   const handleRegister = async () => {
     if (!selectedLive) { toast.error("Selecciona o crea un Live"); return; }
@@ -262,7 +258,6 @@ export default function AdminLiveModule() {
         store: selectedLive.store || "",
         price: priceNum,
         commission_amount: commissionNum,
-        tax_amount: taxAmountNum,
         // Send customer_ids with their quantities
         customer_ids: selectedClients.map(c => c.customer_id),
         quantities: selectedClients.map(c => c.quantity || 1), // Array of quantities matching customer_ids order
@@ -274,7 +269,7 @@ export default function AdminLiveModule() {
         toast.error(`${failed.length} no se registraron: ${failed.map(f => f.customer_id).join(", ")}`);
       }
       // Reset product + clients, keep live
-      setProduct({ item_name: "", price: "", commission: "", tax_amount: "" });
+      setProduct({ item_name: "", price: "", commission: "" });
       setSelectedClients([]);
       refreshHistory();
       loadLives();
@@ -559,27 +554,13 @@ export default function AdminLiveModule() {
                       <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                       <Input type="number" step="0.01" value={product.commission}
                         onChange={e => setProduct({ ...product, commission: e.target.value })}
-                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); document.getElementById("live-product-tax")?.focus(); } }}
+                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); clientSearchRef.current?.focus(); } }}
                         placeholder="0.00" className={`h-11 rounded-lg pl-8 ${product.commission === "" ? "border-red-300 focus:border-red-400" : ""}`} data-testid="live-product-commission" />
                     </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs">Tax (opcional)</Label>
-                    <div className="relative mt-1">
-                      <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                      <Input id="live-product-tax" type="number" step="0.01" value={product.tax_amount}
-                        onChange={e => setProduct({ ...product, tax_amount: e.target.value })}
-                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); clientSearchRef.current?.focus(); } }}
-                        placeholder="0.00" className="h-11 rounded-lg pl-8" data-testid="live-product-tax" />
-                    </div>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Se resta de la ganancia</p>
                   </div>
                   <div className="rounded-lg bg-slate-900 text-white px-3 py-2 text-center" data-testid="live-final-value">
                     <p className="text-[10px] opacity-70 leading-tight">Valor unitario</p>
                     <p className="text-lg font-bold leading-tight">{formatMoney(unitValue)}</p>
-                    {taxAmountNum > 0 && (
-                      <p className="text-[10px] text-amber-400 leading-tight">Ganancia neta: {formatMoney(netCommissionPerUnit)}</p>
-                    )}
                   </div>
                 </div>
               </CardContent>
