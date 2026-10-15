@@ -238,7 +238,7 @@ export default function AdminDashboard() {
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="bg-white rounded-lg p-1">
-              <img src={logoUrl} alt="Logo" className="h-12 object-contain logo-transparent" />
+              <img src={logoUrl} alt="Logo" className="h-12 object-contain logo-transparent" loading="eager" fetchpriority="high" />
             </div>
             <div className="hidden sm:block">
               <p className="text-sm font-bold text-slate-800">{user?.tenant_name || "Admin"}</p>
