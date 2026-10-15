@@ -2679,7 +2679,7 @@ async def get_all_clients(status: Optional[str] = None, current_user: dict = Dep
     shipments_dict = {s["_id"]: s["total_shipping"] for s in shipments_agg}
     
     # Aggregate PENDING purchases (no invoice_id) per user - for "compras pendientes de facturar"
-    # Sum price + commission to match what InvoiceDialog shows as subtotal
+    # Sum only price (Total Etiqueta) - commissions are shown separately in invoice
     pending_purchases_agg = await db.purchases.aggregate([
         {"$match": {
             "user_id": {"$in": user_ids}, 
@@ -2692,10 +2692,7 @@ async def get_all_clients(status: Optional[str] = None, current_user: dict = Dep
         {"$group": {
             "_id": "$user_id", 
             "count": {"$sum": 1}, 
-            "subtotal": {"$sum": {"$add": [
-                {"$ifNull": ["$price", 0]},
-                {"$ifNull": ["$commission", 0]}
-            ]}}
+            "subtotal": {"$sum": {"$ifNull": ["$price", 0]}}
         }}
     ]).to_list(len(user_ids))
     pending_purchases_count_dict = {p["_id"]: p["count"] for p in pending_purchases_agg}
