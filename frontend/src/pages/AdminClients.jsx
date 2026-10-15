@@ -770,13 +770,13 @@ https://didiershop.live/`;
                                 {client.pending_balance > 0 ? '+' : ''}${Math.abs(client.pending_balance || 0).toFixed(2)}
                               </p>
                             </div>
-                            {(client.pending_to_invoice || 0) > 0.01 && (
+                            {(client.pending_purchases_count || 0) > 0 && (
                               <div
                                 className="mt-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"
-                                title={`${client.pending_purchases_count || 0} compras de esta semana aún no facturadas`}
+                                title={`${client.pending_purchases_count || 0} compras pendientes por $${Number(client.pending_to_invoice || 0).toFixed(2)}`}
                                 data-testid={`pending-to-invoice-${client.customer_id}`}
                               >
-                                Por facturar: ${Number(client.pending_to_invoice).toFixed(2)}
+                                Por facturar: {client.pending_purchases_count || 0} items
                               </div>
                             )}
                             {(client.floating_deposits || 0) > 0.01 && (

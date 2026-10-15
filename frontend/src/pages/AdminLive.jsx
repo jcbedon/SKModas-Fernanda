@@ -1218,15 +1218,14 @@ export default function AdminLive() {
                               data-testid={`selected-client-debt-dot-${dbt.color}`}
                             />
                           )}
-                          {pending > 0 && (
+                          {pendingCount > 0 && (
                             <span
                               className={`ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold border rounded-md ${pendingCls}`}
-                              title={`${pendingCount} compras sin facturar — se cobrarán el próximo viernes`}
+                              title={`${pendingCount} compras sin facturar por $${pending.toFixed(2)}`}
                               data-testid="selected-client-pending-badge"
                             >
                               <Receipt className="h-3 w-3" />
-                              Por facturar: ${pending.toFixed(2)}
-                              <span className="opacity-70">({pendingCount})</span>
+                              Por facturar: {pendingCount} items
                             </span>
                           )}
                         </div>
