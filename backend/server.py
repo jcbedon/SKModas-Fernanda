@@ -2688,10 +2688,10 @@ async def get_all_clients(status: Optional[str] = None, current_user: dict = Dep
                 {"invoice_id": {"$exists": False}}
             ]
         }},
-        {"$group": {"_id": "$user_id", "count": {"$sum": 1}, "total": {"$sum": "$total"}}}
+        {"$group": {"_id": "$user_id", "count": {"$sum": 1}, "subtotal": {"$sum": "$price"}}}
     ]).to_list(len(user_ids))
     pending_purchases_count_dict = {p["_id"]: p["count"] for p in pending_purchases_agg}
-    pending_purchases_total_dict = {p["_id"]: p["total"] for p in pending_purchases_agg}
+    pending_purchases_subtotal_dict = {p["_id"]: p["subtotal"] for p in pending_purchases_agg}
     
     # Aggregate saldo_pendiente from non-annulled invoices per customer
     customer_ids_list = [u.get("customer_id") for u in users if u.get("customer_id")]
@@ -2747,7 +2747,7 @@ async def get_all_clients(status: Optional[str] = None, current_user: dict = Dep
             pending_balance = round(-last_total_a_pagar, 2)
         else:
             pending_balance = 0
-        pending_to_invoice = round(pending_purchases_total_dict.get(uid, 0), 2)
+        pending_to_invoice = round(pending_purchases_subtotal_dict.get(uid, 0), 2)
         pending_purchases_count = pending_purchases_count_dict.get(uid, 0)
         customer_key = user.get("customer_id")
         applied_total = applied_by_customer.get(customer_key, 0)
