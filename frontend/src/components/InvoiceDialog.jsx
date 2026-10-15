@@ -962,9 +962,11 @@ export default function InvoiceDialog({ open, onOpenChange, client, tenantInfo, 
                     <div className="bg-white pt-4 border-t">
                       <div className="p-4 rounded-xl" style={{ background: 'rgba(30,58,95,0.05)' }}>
                         {(() => {
-                          const subtotal = selectedTotals.subtotal + selectedTotals.commission;
+                          const subtotal = selectedTotals.subtotal; // Solo precio (Total Etiqueta)
+                          const commission = selectedTotals.commission;
+                          const tax = selectedTotals.tax;
                           const saldo = parseFloat(saldoPendiente) || 0;
-                          const grandTotal = subtotal + saldo;
+                          const grandTotal = subtotal + commission + tax + saldo;
                           const totalAbonos = availableDeposits.reduce((s, d) => s + d.amount, 0);
                           const totalCredits = totalAbonos + (saldoAFavor || 0);
                           const totalAPagar = Math.max(0, grandTotal - totalCredits);
@@ -976,6 +978,18 @@ export default function InvoiceDialog({ open, onOpenChange, client, tenantInfo, 
                                   <span className="text-gray-600">Subtotal:</span>
                                   <span className="font-medium">${subtotal.toFixed(2)}</span>
                                 </div>
+                                {commission > 0 && (
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">Comisiones:</span>
+                                    <span className="font-medium">${commission.toFixed(2)}</span>
+                                  </div>
+                                )}
+                                {tax > 0 && (
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">Taxes:</span>
+                                    <span className="font-medium">${tax.toFixed(2)}</span>
+                                  </div>
+                                )}
                                 {saldo > 0 && (
                                   <div className="flex justify-between text-sm">
                                     <span className="text-orange-600">Saldo Pendiente:</span>
