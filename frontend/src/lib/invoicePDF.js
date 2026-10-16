@@ -175,16 +175,16 @@ export async function generateInvoicePDF(invoiceData, tenantInfo) {
 
   currentY += 12;
 
-  // Products table - For pacas, show total as price and hide commission
+  // Products table - For pacas and LIVE module products, show total as price and hide commission
   const tableData = (inv.purchases || []).map((p) => {
-    const isPaca = p.entry_source === "paca" || p.store === "Pacas";
+    const hideBreakdown = p.entry_source === "paca" || p.store === "Pacas" || p.entry_source === "live";
     const total = p.price + (p.commission || 0);
     return [
       "1", 
       p.item_name, 
-      isPaca ? `$${total.toFixed(2)}` : `$${p.price.toFixed(2)}`, 
+      hideBreakdown ? `$${total.toFixed(2)}` : `$${p.price.toFixed(2)}`, 
       p.store || "", 
-      isPaca ? "—" : `$${(p.commission || 0).toFixed(2)}`, 
+      hideBreakdown ? "—" : `$${(p.commission || 0).toFixed(2)}`, 
       `$${total.toFixed(2)}`,
     ];
   });
