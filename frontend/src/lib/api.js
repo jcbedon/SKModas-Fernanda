@@ -76,7 +76,7 @@ export const authMe = () => api.get("/auth/me");
 export const adminBalanceAdjustment = (data) => api.post("/wallet/admin-adjustment", data);
 export const adminCreateRecharge = (formData) => api.post("/wallet/admin-recharge", formData, { headers: { "Content-Type": "multipart/form-data" } });
 export const getRechargeReport = () => api.get("/wallet/recharge-report");
-export const getClientBalanceReport = () => api.get("/wallet/client-balance-report");
+export const getClientBalanceReport = (params = {}) => api.get("/wallet/client-balance-report", { params });
 export const getWalletTransactions = (userId) => api.get(`/wallet/transactions/${userId}`);
 export const getPendingDeposits = () => api.get("/wallet/pending-deposits");
 export const deleteDeposit = (transactionId, password) => api.post(`/wallet/delete-deposit/${transactionId}`, { password });

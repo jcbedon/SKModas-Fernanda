@@ -13,7 +13,7 @@ const waLink = (w) => {
  * Professional client balance report using jsPDF + jspdf-autotable.
  * Shows total abonado, consumido and saldo for each client.
  */
-export function generateClientBalanceReportPDF({ tenantName, clients, totals }) {
+export function generateClientBalanceReportPDF({ tenantName, clients, totals, periodLabel }) {
   const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -28,14 +28,17 @@ export function generateClientBalanceReportPDF({ tenantName, clients, totals }) 
   doc.text(tenantName || "Reporte", margin, 30);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text("Reporte de Abonos y Consumos por Cliente", margin, 48);
+  const subtitleText = periodLabel 
+    ? `Reporte de Abonos y Consumos — ${periodLabel}` 
+    : "Reporte de Abonos y Consumos por Cliente";
+  doc.text(subtitleText, margin, 48);
   doc.setFontSize(8);
   doc.text(`Generado: ${new Date().toLocaleString("es-EC")}`, pageW - margin, 26, { align: "right" });
   doc.setTextColor(200, 214, 235);
   doc.text(`${clients.length} clientes con actividad`, pageW - margin, 42, { align: "right" });
 
   const head = [[
-    "Cliente", "ID", "WhatsApp", "Total Abonado", "Total Compras", "Envíos", "Total Consumido", "Saldo",
+    "Cliente", "ID", "WhatsApp", "Abonado", "Consumido", "Saldo",
   ]];
   
   const body = clients.map((c) => [
@@ -43,8 +46,6 @@ export function generateClientBalanceReportPDF({ tenantName, clients, totals }) 
     `#${c.customer_id || ""}`,
     c.whatsapp || "—",
     fmtMoney(c.total_abonado),
-    fmtMoney(c.total_compras),
-    fmtMoney(c.total_envios),
     fmtMoney(c.total_consumido),
     fmtMoney(c.saldo),
   ]);
@@ -54,22 +55,20 @@ export function generateClientBalanceReportPDF({ tenantName, clients, totals }) 
     body,
     startY: 78,
     margin: { left: margin, right: margin },
-    styles: { fontSize: 8.5, cellPadding: 6, valign: "middle", lineColor: [226, 232, 240], lineWidth: 0.5 },
-    headStyles: { fillColor: [46, 204, 113], textColor: 255, fontStyle: "bold", fontSize: 8.5, halign: "left" },
+    styles: { fontSize: 9, cellPadding: 6, valign: "middle", lineColor: [226, 232, 240], lineWidth: 0.5 },
+    headStyles: { fillColor: [46, 204, 113], textColor: 255, fontStyle: "bold", fontSize: 9, halign: "left" },
     alternateRowStyles: { fillColor: [240, 253, 244] },
     columnStyles: {
-      0: { cellWidth: 140, fontStyle: "bold" },
-      1: { cellWidth: 60, halign: "center" },
-      2: { cellWidth: 100, textColor: [21, 128, 61] },
+      0: { cellWidth: 180, fontStyle: "bold" },
+      1: { cellWidth: 70, halign: "center" },
+      2: { cellWidth: 120, textColor: [21, 128, 61] },
       3: { halign: "right", fontStyle: "bold", textColor: [21, 128, 61] },
-      4: { halign: "right" },
-      5: { halign: "right" },
-      6: { halign: "right", fontStyle: "bold", textColor: [239, 68, 68] },
-      7: { halign: "right", fontStyle: "bold" },
+      4: { halign: "right", fontStyle: "bold", textColor: [239, 68, 68] },
+      5: { halign: "right", fontStyle: "bold" },
     },
     didParseCell: (data) => {
       // Highlight saldo column based on value
-      if (data.section === "body" && data.column.index === 7) {
+      if (data.section === "body" && data.column.index === 5) {
         const c = clients[data.row.index];
         if (c) {
           if (c.saldo >= 0) {

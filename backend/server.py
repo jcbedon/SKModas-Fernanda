@@ -3621,16 +3621,39 @@ async def get_recharge_report(current_user: dict = Depends(get_current_user)):
     }
 
 @api_router.get("/wallet/client-balance-report")
-async def get_client_balance_report(current_user: dict = Depends(get_current_user)):
+async def get_client_balance_report(
+    date_from: str = None,
+    date_to: str = None,
+    current_user: dict = Depends(get_current_user)
+):
     """
     Get a consolidated report of all clients with:
-    - Total abonado (approved recharges)
-    - Valor consumido (purchases/invoices)
-    - Saldo actual
+    - Total abonado (approved recharges) in the period
+    - Valor consumido (purchases, even if not invoiced) in the period
+    - Saldo = abonado - consumido
+    
+    Filters:
+    - date_from: YYYY-MM-DD (inclusive)
+    - date_to: YYYY-MM-DD (inclusive)
     """
     if current_user["role"] not in ["admin", "employee"]:
         raise HTTPException(status_code=403, detail="No autorizado")
     tid = current_user["tenant_id"]
+    
+    # Parse date filters
+    date_filter = {}
+    if date_from:
+        try:
+            from_dt = datetime.strptime(date_from, "%Y-%m-%d").replace(hour=0, minute=0, second=0)
+            date_filter["$gte"] = from_dt
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            to_dt = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            date_filter["$lte"] = to_dt
+        except ValueError:
+            pass
     
     # Get all active clients
     clients = await db.users.find(
@@ -3644,26 +3667,36 @@ async def get_client_balance_report(current_user: dict = Depends(get_current_use
     client_ids = [c["id"] for c in clients]
     clients_dict = {c["id"]: c for c in clients}
     
+    # Build deposit match filter
+    deposit_match = {
+        "tenant_id": tid,
+        "user_id": {"$in": client_ids},
+        "type": {"$in": ["deposit", "initial_balance", "referral_bonus"]},
+        "status": "approved",
+        "is_deleted": {"$ne": True}
+    }
+    if date_filter:
+        deposit_match["created_at"] = date_filter
+    
     # Get approved deposits (recharges) per client
     deposits_agg = await db.wallet_transactions.aggregate([
-        {"$match": {
-            "tenant_id": tid,
-            "user_id": {"$in": client_ids},
-            "type": {"$in": ["deposit", "initial_balance", "referral_bonus"]},
-            "status": "approved",
-            "is_deleted": {"$ne": True}
-        }},
+        {"$match": deposit_match},
         {"$group": {"_id": "$user_id", "total": {"$sum": "$amount"}}}
     ]).to_list(None)
     deposits_dict = {d["_id"]: d["total"] for d in deposits_agg}
     
-    # Get purchases (consumido) per client - from confirmed purchases
+    # Build purchases match filter
+    purchases_match = {
+        "tenant_id": tid,
+        "user_id": {"$in": client_ids},
+        "status": {"$in": ["pending", "confirmed", "invoiced"]}  # Include pending too
+    }
+    if date_filter:
+        purchases_match["created_at"] = date_filter
+    
+    # Get purchases (consumido) per client - all purchases in period
     purchases_agg = await db.purchases.aggregate([
-        {"$match": {
-            "tenant_id": tid,
-            "user_id": {"$in": client_ids},
-            "status": {"$in": ["confirmed", "invoiced"]}
-        }},
+        {"$match": purchases_match},
         {"$group": {"_id": "$user_id", "total": {"$sum": {"$add": [
             {"$ifNull": ["$price", 0]},
             {"$ifNull": ["$commission", 0]},
@@ -3671,13 +3704,6 @@ async def get_client_balance_report(current_user: dict = Depends(get_current_use
         ]}}}}
     ]).to_list(None)
     purchases_dict = {p["_id"]: p["total"] for p in purchases_agg}
-    
-    # Get shipping costs per client
-    shipping_agg = await db.shipments.aggregate([
-        {"$match": {"tenant_id": tid, "user_id": {"$in": client_ids}}},
-        {"$group": {"_id": "$user_id", "total": {"$sum": "$total_cost"}}}
-    ]).to_list(None)
-    shipping_dict = {s["_id"]: s["total"] for s in shipping_agg}
     
     # Build result
     result = []
@@ -3688,16 +3714,14 @@ async def get_client_balance_report(current_user: dict = Depends(get_current_use
     for client in clients:
         cid = client["id"]
         abonado = round(deposits_dict.get(cid, 0), 2)
-        compras = round(purchases_dict.get(cid, 0), 2)
-        envios = round(shipping_dict.get(cid, 0), 2)
-        consumido = round(compras + envios, 2)
+        consumido = round(purchases_dict.get(cid, 0), 2)
         saldo = round(abonado - consumido, 2)
         
         total_abonado += abonado
         total_consumido += consumido
         total_saldo += saldo
         
-        # Only include clients with activity
+        # Only include clients with activity in the period
         if abonado > 0 or consumido > 0:
             result.append({
                 "id": cid,
@@ -3705,8 +3729,6 @@ async def get_client_balance_report(current_user: dict = Depends(get_current_use
                 "customer_id": client.get("customer_id", "N/A"),
                 "whatsapp": client.get("whatsapp", ""),
                 "total_abonado": abonado,
-                "total_compras": compras,
-                "total_envios": envios,
                 "total_consumido": consumido,
                 "saldo": saldo
             })
