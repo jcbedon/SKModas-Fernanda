@@ -912,8 +912,10 @@ export default function ClientDashboard() {
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className="font-bold text-red-600">${purchase.price.toFixed(2)}</p>
-                              <p className="text-xs text-gray-400">+${(purchase.commission || 0).toFixed(2)} com.</p>
+                              <p className="font-bold text-red-600">${(purchase.price + (purchase.commission || 0)).toFixed(2)}</p>
+                              {purchase.entry_source !== "live" && purchase.entry_source !== "paca" && (purchase.commission || 0) > 0 && (
+                                <p className="text-xs text-gray-400">+${(purchase.commission || 0).toFixed(2)} com.</p>
+                              )}
                             </div>
                           </div>
                         </CardContent>
@@ -1005,8 +1007,10 @@ export default function ClientDashboard() {
                                         </p>
                                       </div>
                                       <div className="text-right">
-                                        <p className="font-bold">${purchase.price.toFixed(2)}</p>
-                                        <p className="text-xs text-gray-400">+${(purchase.commission || 0).toFixed(2)} com.</p>
+                                        <p className="font-bold">${(purchase.price + (purchase.commission || 0)).toFixed(2)}</p>
+                                        {purchase.entry_source !== "live" && purchase.entry_source !== "paca" && (purchase.commission || 0) > 0 && (
+                                          <p className="text-xs text-gray-400">+${(purchase.commission || 0).toFixed(2)} com.</p>
+                                        )}
                                         <Badge className="bg-green-100 text-green-700 text-[10px] mt-1">Facturada</Badge>
                                       </div>
                                     </div>
