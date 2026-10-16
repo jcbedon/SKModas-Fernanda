@@ -13,6 +13,19 @@ Multi-tenant SaaS para personal shoppers con live shopping, wallets, facturació
 - PDFs: jsPDF · Object Store: Emergent internal
 
 ## Changelog (Oct 2026)
+- **[16-oct-2026]** **Reporte de Abonos y Consumos por Cliente**:
+  - Nueva funcionalidad en Gestión de Recargas → pestaña "Reporte".
+  - Sub-tabs: "Abonos y Consumos" (nuevo, verde) y "Detalle Recargas" (existente, azul).
+  - Muestra lista consolidada de clientes con: Total Abonado (recargas aprobadas), Total Consumido (compras + envíos), Saldo (diferencia).
+  - KPIs: Total Abonado, Total Consumido, Saldo Total (a favor o deuda), Cantidad de clientes.
+  - Búsqueda por nombre, ID o WhatsApp.
+  - Botón "Descargar PDF" genera reporte profesional con:
+    - Header con nombre del tenant y fecha de generación.
+    - Tabla con columnas: Cliente, ID, WhatsApp (clickeable), Abonado, Compras, Envíos, Consumido, Saldo.
+    - Colores: verde para saldo a favor, rojo para deuda.
+    - Resumen al final con totales.
+  - Backend: nuevo endpoint `GET /api/wallet/client-balance-report`.
+  - Frontend: nuevo componente `ClientBalanceReport.jsx` + `clientBalanceReportPDF.js`.
 - **[11-oct-2026]** **Rediseño completo de la página de login (Didier Shop)**:
   - Nuevo diseño elegante con fondo negro satinado (#08090B) y líneas luminosas rosa suave.
   - Video promocional con controles personalizados (play/pause, mute, seek, fullscreen).

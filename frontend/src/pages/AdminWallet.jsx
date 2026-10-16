@@ -18,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, CheckCircle, Clock, Image, ZoomIn, XCircle, History, Minus, DollarSign, Search, Plus, Upload, FileBarChart, QrCode, Smartphone, Loader2, Trash2, AlertTriangle, RefreshCw, Check } from "lucide-react";
 import RechargeReport from "@/components/RechargeReport";
+import ClientBalanceReport from "@/components/ClientBalanceReport";
 import QRCode from "qrcode";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -84,6 +85,7 @@ export default function AdminWallet() {
   
   // Recharge Report state
   const [showReport, setShowReport] = useState(false);
+  const [reportTab, setReportTab] = useState("balance"); // "balance" or "recharges"
   
   // Deleted tab state
   const [showDeleted, setShowDeleted] = useState(false);
@@ -1818,8 +1820,36 @@ export default function AdminWallet() {
 
         {/* Recharge Report Section */}
         {showReport && (
-          <div className="mt-4">
-            <RechargeReport />
+          <div className="mt-4 space-y-4">
+            {/* Sub-tabs for report types */}
+            <div className="flex gap-2 border-b pb-3">
+              <Button
+                variant={reportTab === "balance" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setReportTab("balance")}
+                className={`rounded-xl ${reportTab === "balance" ? "bg-green-600 hover:bg-green-700" : ""}`}
+                data-testid="report-tab-balance"
+              >
+                <DollarSign className="h-4 w-4 mr-1" />
+                Abonos y Consumos
+              </Button>
+              <Button
+                variant={reportTab === "recharges" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setReportTab("recharges")}
+                className={`rounded-xl ${reportTab === "recharges" ? "bg-blue-600 hover:bg-blue-700" : ""}`}
+                data-testid="report-tab-recharges"
+              >
+                <FileBarChart className="h-4 w-4 mr-1" />
+                Detalle Recargas
+              </Button>
+            </div>
+            
+            {reportTab === "balance" ? (
+              <ClientBalanceReport />
+            ) : (
+              <RechargeReport />
+            )}
           </div>
         )}
       </div>

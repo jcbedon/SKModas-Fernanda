@@ -3620,6 +3620,110 @@ async def get_recharge_report(current_user: dict = Depends(get_current_user)):
         "totals": totals
     }
 
+@api_router.get("/wallet/client-balance-report")
+async def get_client_balance_report(current_user: dict = Depends(get_current_user)):
+    """
+    Get a consolidated report of all clients with:
+    - Total abonado (approved recharges)
+    - Valor consumido (purchases/invoices)
+    - Saldo actual
+    """
+    if current_user["role"] not in ["admin", "employee"]:
+        raise HTTPException(status_code=403, detail="No autorizado")
+    tid = current_user["tenant_id"]
+    
+    # Get all active clients
+    clients = await db.users.find(
+        {"tenant_id": tid, "role": "client", "is_active": {"$ne": False}},
+        {"_id": 0, "id": 1, "name": 1, "customer_id": 1, "whatsapp": 1}
+    ).to_list(None)
+    
+    if not clients:
+        return {"clients": [], "totals": {"total_abonado": 0, "total_consumido": 0, "total_saldo": 0}}
+    
+    client_ids = [c["id"] for c in clients]
+    clients_dict = {c["id"]: c for c in clients}
+    
+    # Get approved deposits (recharges) per client
+    deposits_agg = await db.wallet_transactions.aggregate([
+        {"$match": {
+            "tenant_id": tid,
+            "user_id": {"$in": client_ids},
+            "type": {"$in": ["deposit", "initial_balance", "referral_bonus"]},
+            "status": "approved",
+            "is_deleted": {"$ne": True}
+        }},
+        {"$group": {"_id": "$user_id", "total": {"$sum": "$amount"}}}
+    ]).to_list(None)
+    deposits_dict = {d["_id"]: d["total"] for d in deposits_agg}
+    
+    # Get purchases (consumido) per client - from confirmed purchases
+    purchases_agg = await db.purchases.aggregate([
+        {"$match": {
+            "tenant_id": tid,
+            "user_id": {"$in": client_ids},
+            "status": {"$in": ["confirmed", "invoiced"]}
+        }},
+        {"$group": {"_id": "$user_id", "total": {"$sum": {"$add": [
+            {"$ifNull": ["$price", 0]},
+            {"$ifNull": ["$commission", 0]},
+            {"$ifNull": ["$tax_amount", 0]}
+        ]}}}}
+    ]).to_list(None)
+    purchases_dict = {p["_id"]: p["total"] for p in purchases_agg}
+    
+    # Get shipping costs per client
+    shipping_agg = await db.shipments.aggregate([
+        {"$match": {"tenant_id": tid, "user_id": {"$in": client_ids}}},
+        {"$group": {"_id": "$user_id", "total": {"$sum": "$total_cost"}}}
+    ]).to_list(None)
+    shipping_dict = {s["_id"]: s["total"] for s in shipping_agg}
+    
+    # Build result
+    result = []
+    total_abonado = 0
+    total_consumido = 0
+    total_saldo = 0
+    
+    for client in clients:
+        cid = client["id"]
+        abonado = round(deposits_dict.get(cid, 0), 2)
+        compras = round(purchases_dict.get(cid, 0), 2)
+        envios = round(shipping_dict.get(cid, 0), 2)
+        consumido = round(compras + envios, 2)
+        saldo = round(abonado - consumido, 2)
+        
+        total_abonado += abonado
+        total_consumido += consumido
+        total_saldo += saldo
+        
+        # Only include clients with activity
+        if abonado > 0 or consumido > 0:
+            result.append({
+                "id": cid,
+                "name": client.get("name", "—"),
+                "customer_id": client.get("customer_id", "N/A"),
+                "whatsapp": client.get("whatsapp", ""),
+                "total_abonado": abonado,
+                "total_compras": compras,
+                "total_envios": envios,
+                "total_consumido": consumido,
+                "saldo": saldo
+            })
+    
+    # Sort by total_abonado descending
+    result.sort(key=lambda x: x["total_abonado"], reverse=True)
+    
+    return {
+        "clients": result,
+        "totals": {
+            "total_abonado": round(total_abonado, 2),
+            "total_consumido": round(total_consumido, 2),
+            "total_saldo": round(total_saldo, 2),
+            "clients_count": len(result)
+        }
+    }
+
 @api_router.get("/wallet/transactions/{user_id}")
 async def get_wallet_transactions(user_id: str, current_user: dict = Depends(get_current_user)):
     tid = current_user["tenant_id"]
