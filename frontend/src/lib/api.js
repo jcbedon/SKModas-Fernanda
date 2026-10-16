@@ -8,6 +8,9 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// Export api for direct usage
+export { api };
+
 api.interceptors.request.use((config) => {
   const stored = localStorage.getItem("outletsusa_user");
   if (stored) {

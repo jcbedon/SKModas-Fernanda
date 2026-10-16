@@ -11,6 +11,7 @@ import {
   getProductHistory,
   createLiveModulePurchases,
   getLivePurchases,
+  api,
 } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Video, Plus, Search, X, DollarSign, Store, Radio, CheckCircle,
-  AlertTriangle, Trash2, ArrowLeft, Loader2, Users, Tag, Package, UserPlus,
+  AlertTriangle, Trash2, ArrowLeft, Loader2, Users, Tag, Package, UserPlus, Edit,
 } from "lucide-react";
 
 const getEffectiveTaxRate = (taxOption, customTax) => {
@@ -73,6 +74,12 @@ export default function AdminLiveModule() {
   const [addingClients, setAddingClients] = useState([]);
   const [submittingAdd, setSubmittingAdd] = useState(false);
   const addClientRef = useRef(null);
+
+  // Edit product modal
+  const [editProductModal, setEditProductModal] = useState(null); // { item_name, price, commission, purchase_ids }
+  const [editPrice, setEditPrice] = useState("");
+  const [editCommission, setEditCommission] = useState("");
+  const [submittingEdit, setSubmittingEdit] = useState(false);
 
   useEffect(() => {
     if (!moduleEnabled) return;
@@ -370,6 +377,45 @@ export default function AdminLiveModule() {
       toast.error(e.response?.data?.detail || "Error al agregar clientes");
     } finally {
       setSubmittingAdd(false);
+    }
+  };
+
+  // === Edit product (price/commission) ===
+  const openEditProduct = (prod) => {
+    // Get all purchase IDs for this product group
+    const purchaseIds = prod.customers.map(c => c.purchase_id);
+    setEditProductModal({ ...prod, purchase_ids: purchaseIds });
+    setEditPrice(prod.price.toString());
+    setEditCommission((prod.commission || 0).toString());
+  };
+
+  const submitEditProduct = async () => {
+    if (!editProductModal) return;
+    const newPrice = parseFloat(editPrice) || 0;
+    const newCommission = parseFloat(editCommission) || 0;
+    if (newPrice <= 0) {
+      toast.error("El precio debe ser mayor a 0");
+      return;
+    }
+    setSubmittingEdit(true);
+    try {
+      // Update each purchase in the group
+      const promises = editProductModal.purchase_ids.map(purchaseId =>
+        api.put(`/purchases/${purchaseId}`, {
+          price: newPrice,
+          commission: newCommission,
+          total: newPrice + newCommission,
+        })
+      );
+      await Promise.all(promises);
+      toast.success(`Producto "${editProductModal.item_name}" actualizado`);
+      setEditProductModal(null);
+      loadLives();
+      loadLivePurchases(selectedLive.id);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Error al actualizar producto");
+    } finally {
+      setSubmittingEdit(false);
     }
   };
 
@@ -738,16 +784,28 @@ export default function AdminLiveModule() {
                         </div>
                         
                         {/* Add client button */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openAddToProduct(prod)}
-                          className="w-full rounded-lg text-xs h-8 border-rose-200 text-rose-600 hover:bg-rose-50"
-                          data-testid={`add-to-product-${idx}`}
-                        >
-                          <UserPlus className="h-3.5 w-3.5 mr-1" />
-                          Agregar cliente
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEditProduct(prod)}
+                            className="flex-1 rounded-lg text-xs h-8 border-slate-200 text-slate-600 hover:bg-slate-50"
+                            data-testid={`edit-product-${idx}`}
+                          >
+                            <Edit className="h-3.5 w-3.5 mr-1" />
+                            Editar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openAddToProduct(prod)}
+                            className="flex-1 rounded-lg text-xs h-8 border-rose-200 text-rose-600 hover:bg-rose-50"
+                            data-testid={`add-to-product-${idx}`}
+                          >
+                            <UserPlus className="h-3.5 w-3.5 mr-1" />
+                            Agregar
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -845,6 +903,87 @@ export default function AdminLiveModule() {
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <>Agregar {addingClients.length} cliente(s) · {formatMoney((addToProductModal.price + addToProductModal.commission) * addingClients.length)}</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === Modal: Edit product (price/commission) === */}
+      {editProductModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setEditProductModal(null)}>
+          <div
+            className="bg-white rounded-2xl w-full max-w-md"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-slate-100">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-800">Editar Producto</h3>
+                <button onClick={() => setEditProductModal(null)} className="text-slate-400 hover:text-slate-600">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <p className="text-sm text-slate-500 mt-1">
+                <span className="font-semibold text-rose-600">{editProductModal.item_name}</span>
+                <span className="ml-2 text-xs">({editProductModal.customers.length} cliente{editProductModal.customers.length > 1 ? 's' : ''})</span>
+              </p>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Price */}
+              <div>
+                <Label className="text-sm font-medium">Precio</Label>
+                <div className="relative mt-1">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={editPrice}
+                    onChange={e => setEditPrice(e.target.value)}
+                    placeholder="0.00"
+                    className="pl-9 h-11"
+                    data-testid="edit-product-price"
+                  />
+                </div>
+              </div>
+
+              {/* Commission */}
+              <div>
+                <Label className="text-sm font-medium">Comisión</Label>
+                <div className="relative mt-1">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={editCommission}
+                    onChange={e => setEditCommission(e.target.value)}
+                    placeholder="0.00"
+                    className="pl-9 h-11"
+                    data-testid="edit-product-commission"
+                  />
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div className="rounded-lg bg-slate-100 p-3 text-center">
+                <p className="text-xs text-slate-500">Nuevo valor unitario</p>
+                <p className="text-xl font-bold text-slate-800">
+                  {formatMoney((parseFloat(editPrice) || 0) + (parseFloat(editCommission) || 0))}
+                </p>
+              </div>
+
+              {/* Submit button */}
+              <Button
+                onClick={submitEditProduct}
+                disabled={submittingEdit}
+                className="w-full h-12 rounded-xl bg-[#1E3A5F] hover:bg-[#152a45] text-white font-bold"
+                data-testid="edit-product-submit"
+              >
+                {submittingEdit ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <>Guardar cambios</>
                 )}
               </Button>
             </div>
