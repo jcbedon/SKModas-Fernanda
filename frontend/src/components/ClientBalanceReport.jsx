@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileDown, Users, DollarSign, ShoppingCart, Wallet, Search, Loader2 } from "lucide-react";
+import { FileDown, Users, Search, Loader2 } from "lucide-react";
 import { useAuth } from "@/App";
 
 const fmtMoney = (v) => "$" + Number(v || 0).toFixed(2);
@@ -91,56 +91,6 @@ export default function ClientBalanceReport() {
 
   return (
     <div className="space-y-4">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="rounded-xl border-green-200 bg-green-50">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-green-600" />
-              <div>
-                <p className="text-xs text-green-600">Total Abonado</p>
-                <p className="text-lg font-bold text-green-700" data-testid="total-abonado">{fmtMoney(totals.total_abonado)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="rounded-xl border-red-200 bg-red-50">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5 text-red-600" />
-              <div>
-                <p className="text-xs text-red-600">Total Consumido</p>
-                <p className="text-lg font-bold text-red-700" data-testid="total-consumido">{fmtMoney(totals.total_consumido)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className={`rounded-xl ${totals.total_saldo >= 0 ? 'border-emerald-200 bg-emerald-50' : 'border-orange-200 bg-orange-50'}`}>
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 text-emerald-600" />
-              <div>
-                <p className="text-xs text-emerald-600">{totals.total_saldo >= 0 ? 'Saldo a Favor' : 'Deuda Total'}</p>
-                <p className={`text-lg font-bold ${totals.total_saldo >= 0 ? 'text-emerald-700' : 'text-orange-700'}`} data-testid="total-saldo">
-                  {fmtMoney(Math.abs(totals.total_saldo))}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="rounded-xl border-slate-200 bg-slate-50">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-slate-600" />
-              <div>
-                <p className="text-xs text-slate-600">Clientes</p>
-                <p className="text-lg font-bold text-slate-700" data-testid="clients-count">{totals.clients_count}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Search and Download */}
       <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
