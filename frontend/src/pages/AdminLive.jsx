@@ -19,7 +19,8 @@ import {
   getDeletePurchasePreview,
   getTenantSettings,
   getLive,
-  getClientsDebtsReport
+  getClientsDebtsReport,
+  updateManualCommission
 } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -58,7 +59,8 @@ import {
   ChevronDown,
   ChevronRight,
   Package,
-  Receipt
+  Receipt,
+  HandCoins
 } from "lucide-react";
 
 // Default tax options
@@ -197,6 +199,12 @@ export default function AdminLive() {
   // and to gate the submission with a confirmation when the client is in "red" status.
   const [debtStatusMap, setDebtStatusMap] = useState({});
   const [debtConfirmDialog, setDebtConfirmDialog] = useState(null); // {client, status, onConfirm}
+
+  // Manual commission dialog state
+  const [manualCommissionDialog, setManualCommissionDialog] = useState(false);
+  const [manualCommissionValue, setManualCommissionValue] = useState("");
+  const [manualCommissionNote, setManualCommissionNote] = useState("");
+  const [savingManualCommission, setSavingManualCommission] = useState(false);
 
   const customerIdRef = useRef(null);
 
@@ -427,6 +435,35 @@ export default function AdminLive() {
     } catch (error) {
       const errorMessage = error.response?.data?.detail || "Error al finalizar Live";
       toast.error(errorMessage);
+    }
+  };
+
+  // Open manual commission dialog
+  const openManualCommissionDialog = () => {
+    setManualCommissionValue(selectedLive?.manual_commission || "");
+    setManualCommissionNote(selectedLive?.manual_commission_note || "");
+    setManualCommissionDialog(true);
+  };
+
+  // Save manual commission
+  const handleSaveManualCommission = async () => {
+    if (!selectedLive) return;
+    const value = parseFloat(manualCommissionValue) || 0;
+    
+    setSavingManualCommission(true);
+    try {
+      await updateManualCommission(selectedLive.id, value, manualCommissionNote);
+      toast.success("Comisión manual guardada");
+      // Reload live data
+      const res = await getLive(selectedLive.id);
+      setSelectedLive(res.data);
+      // Update in lives list too
+      setLives(prev => prev.map(l => l.id === selectedLive.id ? res.data : l));
+      setManualCommissionDialog(false);
+    } catch (error) {
+      toast.error("Error al guardar comisión manual");
+    } finally {
+      setSavingManualCommission(false);
     }
   };
 
@@ -1117,6 +1154,22 @@ export default function AdminLive() {
                       <div>
                         <p className="text-gray-300 text-[11px]">Comisiones</p>
                         <p className="text-lg font-bold leading-tight">${(selectedLive.total_commissions || 0).toFixed(2)}</p>
+                      </div>
+                      {/* Manual Commission Button */}
+                      <div>
+                        <button
+                          onClick={openManualCommissionDialog}
+                          className="flex flex-col items-start hover:bg-white/10 rounded-lg px-2 py-1 -mx-2 -my-1 transition-colors"
+                          data-testid="manual-commission-btn"
+                        >
+                          <p className="text-gray-300 text-[11px] flex items-center gap-1">
+                            <HandCoins className="h-3 w-3" />
+                            Comisión Manual
+                          </p>
+                          <p className={`text-lg font-bold leading-tight ${(selectedLive.manual_commission || 0) > 0 ? 'text-green-300' : 'text-white/50'}`}>
+                            ${(selectedLive.manual_commission || 0).toFixed(2)}
+                          </p>
+                        </button>
                       </div>
                       {/* Store Invoice inline in header - always show */}
                       <div className="ml-auto min-w-0">
@@ -1906,6 +1959,65 @@ export default function AdminLive() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Manual Commission Dialog */}
+        <Dialog open={manualCommissionDialog} onOpenChange={setManualCommissionDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2" style={{ color: "#1E3A5F" }}>
+                <HandCoins className="h-5 w-5 text-green-600" />
+                Comisión Manual del Live
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-gray-600">
+                Agrega una comisión extra que se sumará a las ganancias de este Live.
+                Esta comisión se incluirá en reportes y estadísticas.
+              </p>
+              <div>
+                <Label className="text-sm font-medium">Monto de Comisión ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={manualCommissionValue}
+                  onChange={(e) => setManualCommissionValue(e.target.value)}
+                  className="mt-1"
+                  data-testid="manual-commission-input"
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Nota (opcional)</Label>
+                <Input
+                  type="text"
+                  placeholder="Ej: Propina, comisión acordada..."
+                  value={manualCommissionNote}
+                  onChange={(e) => setManualCommissionNote(e.target.value)}
+                  className="mt-1"
+                  data-testid="manual-commission-note"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setManualCommissionDialog(false)}
+                disabled={savingManualCommission}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSaveManualCommission}
+                disabled={savingManualCommission}
+                className="bg-green-600 hover:bg-green-700"
+                data-testid="save-manual-commission-btn"
+              >
+                {savingManualCommission ? "Guardando..." : "Guardar"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

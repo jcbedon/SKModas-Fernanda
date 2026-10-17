@@ -125,6 +125,34 @@ export default function StoreProfitsReport() {
         </Card>
       </div>
 
+      {/* Earnings Breakdown */}
+      {(summary.total_commissions > 0 || summary.total_manual_commissions > 0) && (
+        <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50">
+          <CardContent className="pt-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-green-600" />
+              Desglose de Ganancias
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="text-center p-3 bg-white rounded-xl shadow-sm">
+                <p className="text-xs text-gray-500 mb-1">Comisiones Productos</p>
+                <p className="text-lg font-bold text-blue-600">${(summary.total_commissions || 0).toFixed(2)}</p>
+              </div>
+              <div className="text-center p-3 bg-white rounded-xl shadow-sm">
+                <p className="text-xs text-gray-500 mb-1">Comisiones Manuales</p>
+                <p className="text-lg font-bold text-purple-600">${(summary.total_manual_commissions || 0).toFixed(2)}</p>
+              </div>
+              <div className="text-center p-3 bg-white rounded-xl shadow-sm md:col-span-1 col-span-2">
+                <p className="text-xs text-gray-500 mb-1">Margen Tiendas</p>
+                <p className={`text-lg font-bold ${(summary.total_sales - summary.total_store_cost - (summary.total_commissions || 0) - (summary.total_manual_commissions || 0)) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  ${(summary.total_sales - summary.total_store_cost - (summary.total_commissions || 0) - (summary.total_manual_commissions || 0)).toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Profit margin */}
       {summary.avg_profit_margin > 0 && (
         <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
@@ -198,7 +226,11 @@ export default function StoreProfitsReport() {
                             </p>
                             <p className="text-xs text-gray-500">
                               Ventas ${store.total_sales.toFixed(2)} - Costo ${store.store_invoice_amount?.toFixed(2)}
+                              {store.manual_commission > 0 && ` + $${store.manual_commission.toFixed(2)} manual`}
                             </p>
+                            {store.manual_commission > 0 && store.manual_commission_note && (
+                              <p className="text-xs text-purple-500 italic">{store.manual_commission_note}</p>
+                            )}
                             {store.profit_margin !== null && (
                               <Badge className={`mt-1 ${store.profit_margin >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
                                 {store.profit_margin}% margen
@@ -209,7 +241,13 @@ export default function StoreProfitsReport() {
                           <>
                             <p className="text-lg font-bold text-gray-600">
                               ${store.total_sales.toFixed(2)}
+                              {store.manual_commission > 0 && (
+                                <span className="text-purple-600 text-sm ml-1">+ ${store.manual_commission.toFixed(2)}</span>
+                              )}
                             </p>
+                            {store.manual_commission > 0 && store.manual_commission_note && (
+                              <p className="text-xs text-purple-500 italic">{store.manual_commission_note}</p>
+                            )}
                             <Badge className="bg-gray-100 text-gray-500 mt-1">
                               Sin factura registrada
                             </Badge>

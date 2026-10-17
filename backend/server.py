@@ -379,6 +379,9 @@ class Live(BaseModel):
     # Tax chosen at creation (used by the Live fast-entry module; optional).
     tax_rate: Optional[float] = None
     apply_tax: Optional[bool] = None
+    # Manual commission added by admin (additional earnings not from product commissions)
+    manual_commission: Optional[float] = None
+    manual_commission_note: Optional[str] = None
 
 class Purchase(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -5251,6 +5254,34 @@ async def upload_store_invoice_image(
     
     return {"message": "Imagen subida", "image_url": image_url}
 
+@api_router.put("/lives/{live_id}/manual-commission")
+async def update_manual_commission(live_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    """Update manual commission for a Live Shopping session"""
+    if current_user["role"] not in ["admin", "employee"]:
+        raise HTTPException(status_code=403, detail="No autorizado")
+    
+    tid = current_user["tenant_id"]
+    live = await db.lives.find_one({"id": live_id, "tenant_id": tid}, {"_id": 0})
+    if not live:
+        raise HTTPException(status_code=404, detail="Live no encontrado")
+    
+    manual_commission = float(data.get("manual_commission", 0))
+    note = data.get("note", "")
+    
+    await db.lives.update_one(
+        {"id": live_id, "tenant_id": tid},
+        {"$set": {
+            "manual_commission": manual_commission,
+            "manual_commission_note": note
+        }}
+    )
+    
+    return {
+        "message": "Comisión manual actualizada",
+        "manual_commission": manual_commission,
+        "note": note
+    }
+
 @api_router.post("/lives/{live_id}/generate-upload-qr")
 async def generate_upload_qr(live_id: str, current_user: dict = Depends(get_current_user)):
     """Generate a temporary token for mobile upload via QR code"""
@@ -9428,21 +9459,30 @@ async def get_store_profits_report(current_user: dict = Depends(get_current_user
     total_sales = 0
     total_store_cost = 0
     total_profit = 0
+    total_commissions = 0
+    total_manual_commissions = 0
     
     for live in lives:
         store_amount = live.get("store_invoice_amount")
         store_image = live.get("store_invoice_image")
         live_total = live.get("total_sales", 0)
         live_commissions = live.get("total_commissions", 0)
+        manual_commission = live.get("manual_commission", 0) or 0
+        manual_commission_note = live.get("manual_commission_note", "")
         
         # Calculate profit if store amount exists
         profit = None
         if store_amount is not None:
-            profit = live_total - store_amount
+            profit = live_total - store_amount + manual_commission
             total_store_cost += store_amount
             total_profit += profit
+        else:
+            # If no store invoice, still count manual commission as profit
+            total_profit += manual_commission
         
         total_sales += live_total
+        total_commissions += live_commissions
+        total_manual_commissions += manual_commission
         
         store_profits.append({
             "live_id": live["id"],
@@ -9455,7 +9495,9 @@ async def get_store_profits_report(current_user: dict = Depends(get_current_user
             "store_invoice_amount": round(store_amount, 2) if store_amount else None,
             "store_invoice_image": store_image,
             "profit": round(profit, 2) if profit is not None else None,
-            "profit_margin": round((profit / live_total * 100), 1) if profit is not None and live_total > 0 else None
+            "profit_margin": round((profit / live_total * 100), 1) if profit is not None and live_total > 0 else None,
+            "manual_commission": round(manual_commission, 2),
+            "manual_commission_note": manual_commission_note
         })
     
     return {
@@ -9466,6 +9508,8 @@ async def get_store_profits_report(current_user: dict = Depends(get_current_user
             "total_sales": round(total_sales, 2),
             "total_store_cost": round(total_store_cost, 2),
             "total_profit": round(total_profit, 2),
+            "total_commissions": round(total_commissions, 2),
+            "total_manual_commissions": round(total_manual_commissions, 2),
             "avg_profit_margin": round((total_profit / total_store_cost * 100), 1) if total_store_cost > 0 else 0
         }
     }

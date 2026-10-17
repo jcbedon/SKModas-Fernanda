@@ -98,6 +98,10 @@ export const updateStoreInvoice = (liveId, amount, itemsCount, invoiceTax) => ap
   ...(itemsCount !== undefined && itemsCount !== null && itemsCount !== "" ? { store_invoice_items_count: itemsCount } : {}),
   ...(invoiceTax !== undefined && invoiceTax !== null && invoiceTax !== "" ? { store_invoice_tax: invoiceTax } : {}),
 });
+export const updateManualCommission = (liveId, manualCommission, note) => api.put(`/lives/${liveId}/manual-commission`, {
+  manual_commission: manualCommission,
+  note: note || ""
+});
 export const uploadStoreInvoiceImage = (liveId, formData) => api.post(`/lives/${liveId}/store-invoice/upload`, formData, { headers: { "Content-Type": "multipart/form-data" } });
 export const generateUploadQR = (liveId) => api.post(`/lives/${liveId}/generate-upload-qr`);
 export const checkUploadStatus = (uploadToken) => api.get(`/lives/check-upload/${uploadToken}`);
