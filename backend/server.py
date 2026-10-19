@@ -5285,8 +5285,8 @@ async def update_manual_commission(live_id: str, data: dict, current_user: dict 
 @api_router.put("/lives/{live_id}/remove-all-taxes")
 async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(get_current_user)):
     """
-    Remove taxes from ALL purchases in a Live and recalculate prices.
-    Sets tax fields to 0 and recalculates totals without tax.
+    Remove taxes from ALL purchases in a Live and recalculate totals.
+    Sets tax fields to 0 and recalculates purchase.total = price + commission (no tax).
     """
     if current_user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Solo administradores pueden realizar esta acción")
@@ -5295,9 +5295,6 @@ async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(
     live = await db.lives.find_one({"id": live_id, "tenant_id": tid}, {"_id": 0})
     if not live:
         raise HTTPException(status_code=404, detail="Live no encontrado")
-    
-    # Get the tax rate that was applied to this live
-    live_tax_rate = live.get("tax_rate") or 0
     
     # Get all purchases for this live
     purchases = await db.purchases.find(
@@ -5316,40 +5313,31 @@ async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(
         
         # Get current values
         current_price = purchase.get("price", 0) or 0
-        current_tax_amount = purchase.get("tax_amount", 0) or 0
-        current_tax_rate = purchase.get("tax_rate", 0) or purchase.get("tax_percent", 0) or 0
+        current_total = purchase.get("total", 0) or 0
         commission = purchase.get("commission", 0) or 0
         
-        # If tax_amount exists, the price might already be without tax
-        # If no tax_amount but tax_rate exists, price might include tax
+        # Calculate the tax that was in the total
+        # total = price + tax + commission, so tax = total - price - commission
+        calculated_tax = current_total - current_price - commission
+        if calculated_tax > 0:
+            total_taxes_removed += calculated_tax
         
-        # Calculate original price (before tax was added)
-        # If tax was calculated as: total = price * (1 + tax_rate/100)
-        # Then: original_price = total / (1 + tax_rate/100)
+        # New total is just price + commission (no tax)
+        new_total = round(current_price + commission, 2)
+        new_total_sales += new_total
         
-        original_price = current_price
-        if current_tax_rate > 0 and current_tax_amount == 0:
-            # Tax was included in price, need to extract it
-            original_price = round(current_price / (1 + current_tax_rate / 100), 2)
-            current_tax_amount = round(current_price - original_price, 2)
-        
-        total_taxes_removed += current_tax_amount
-        
-        # New price is original price (without tax)
-        new_price = original_price
-        new_total_sales += new_price + commission
-        
-        # Update purchase
+        # Update purchase: set tax fields to 0 and recalculate total
         await db.purchases.update_one(
             {"id": purchase_id, "tenant_id": tid},
             {"$set": {
-                "price": new_price,
+                "total": new_total,
                 "tax_amount": 0,
                 "tax_rate": 0,
                 "tax_percent": 0,
                 "tax": 0,
                 "tax_type": None,
-                "tax_label": None
+                "tax_label": None,
+                "tax_option": "0"
             }}
         )
         updated_count += 1
@@ -5366,7 +5354,7 @@ async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(
     )
     
     return {
-        "message": f"Taxes removidos y precios recalculados para {updated_count} productos",
+        "message": f"Taxes removidos y totales recalculados para {updated_count} productos",
         "updated_count": updated_count,
         "total_taxes_removed": round(total_taxes_removed, 2),
         "new_total_sales": round(new_total_sales, 2),
