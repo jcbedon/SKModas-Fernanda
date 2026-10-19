@@ -5286,7 +5286,7 @@ async def update_manual_commission(live_id: str, data: dict, current_user: dict 
 async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(get_current_user)):
     """
     Remove taxes from ALL purchases in a Live.
-    Sets tax_amount = 0 for all purchases and updates Live totals.
+    Sets tax_amount = 0, tax_rate = 0, tax_percent = 0 for all purchases and updates Live totals.
     Use this to bulk-edit a Live that was created with taxes but shouldn't have them.
     """
     if current_user["role"] != "admin":
@@ -5308,16 +5308,27 @@ async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(
     # Calculate total taxes being removed
     total_taxes_removed = sum(p.get("tax_amount", 0) or 0 for p in purchases)
     
-    # Update all purchases: set tax_amount = 0
+    # Update all purchases: set ALL tax fields to 0/null
     result = await db.purchases.update_many(
         {"live_id": live_id, "tenant_id": tid},
-        {"$set": {"tax_amount": 0}}
+        {"$set": {
+            "tax_amount": 0,
+            "tax_rate": 0,
+            "tax_percent": 0,
+            "tax": 0,
+            "tax_type": None,
+            "tax_label": None
+        }}
     )
     
-    # Update the Live's total_taxes_paid to 0
+    # Update the Live: remove tax_rate and total_taxes_paid
     await db.lives.update_one(
         {"id": live_id, "tenant_id": tid},
-        {"$set": {"total_taxes_paid": 0}}
+        {"$set": {
+            "total_taxes_paid": 0,
+            "tax_rate": None,
+            "apply_tax": False
+        }}
     )
     
     return {
