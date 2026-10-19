@@ -13,15 +13,17 @@ import { useAuth } from "@/App";
 
 const fmtMoney = (v) => "$" + Number(v || 0).toFixed(2);
 
-// Get week key (Monday of the week) for a date
+// Get week key (Thursday of the week) for a date - Week closes Wednesday 23:59
 const getWeekKey = (dateStr) => {
   if (!dateStr) return null;
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return null;
   const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  // JS getDay(): 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday.
+  // Days back to Thursday: Thu→0, Fri→1, Sat→2, Sun→3, Mon→4, Tue→5, Wed→6.
   const jsDay = local.getDay();
-  const daysSinceMonday = jsDay === 0 ? 6 : jsDay - 1;
-  local.setDate(local.getDate() - daysSinceMonday);
+  const daysSinceThursday = (jsDay - 4 + 7) % 7;
+  local.setDate(local.getDate() - daysSinceThursday);
   const y = local.getFullYear();
   const m = String(local.getMonth() + 1).padStart(2, "0");
   const day = String(local.getDate()).padStart(2, "0");
@@ -32,16 +34,16 @@ const getWeekKey = (dateStr) => {
 const getWeekLabel = (key) => {
   if (!key) return "—";
   const [y, m, d] = key.split("-").map(Number);
-  const startMonday = new Date(y, m - 1, d);
-  const endSunday = new Date(startMonday);
-  endSunday.setDate(startMonday.getDate() + 6);
+  const startThursday = new Date(y, m - 1, d);
+  const endWednesday = new Date(startThursday);
+  endWednesday.setDate(startThursday.getDate() + 6);
   const fmt = (dt) => {
     const day = dt.getDate();
     const monthRaw = dt.toLocaleDateString('es-ES', { month: 'short' });
     const month = monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1).replace('.', '');
     return `${day} ${month}`;
   };
-  return `${fmt(startMonday)} - ${fmt(endSunday)}`;
+  return `${fmt(startThursday)} - ${fmt(endWednesday)}`;
 };
 
 // Get current week key

@@ -7323,7 +7323,7 @@ async def calculate_and_apply_late_fee(invoice: dict, tenant: dict, shipment: di
     - Only applies if tenant has late_fee_enabled=True
     - Only applies if invoice is not annulled
     - Only applies if late_fee_applied is not already True
-    - Only applies after late_fee_grace_hours have passed since invoice creation
+    - Late fee applies on Thursday 23:59 (after week closes Wednesday 23:59)
     - Fee amount comes from the shipping_category's late_fee value
     """
     # Skip if already applied or annulled
@@ -7334,8 +7334,7 @@ async def calculate_and_apply_late_fee(invoice: dict, tenant: dict, shipment: di
     if not tenant.get("late_fee_enabled"):
         return invoice
     
-    # Check if grace period has passed
-    grace_hours = tenant.get("late_fee_grace_hours", 24)
+    # Check if late fee deadline has passed (Thursday 23:59 after invoice week)
     created_at = invoice.get("created_at")
     if not created_at:
         return invoice
@@ -7343,10 +7342,33 @@ async def calculate_and_apply_late_fee(invoice: dict, tenant: dict, shipment: di
     try:
         created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
         now = datetime.now(timezone.utc)
-        hours_since_creation = (now - created_dt).total_seconds() / 3600
         
-        if hours_since_creation < grace_hours:
-            return invoice  # Grace period not yet passed
+        # Find the Thursday 23:59 of the week the invoice was created
+        # Week runs Thursday 00:00 → Wednesday 23:59
+        # Late fee applies Thursday 23:59 (next day after week closes)
+        
+        # Get invoice creation date in local context
+        invoice_date = created_dt.date()
+        
+        # Find the start of the invoice's week (Thursday)
+        # JS getDay mapping: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
+        # Python weekday: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+        # Days back to Thursday: Thu→0, Fri→1, Sat→2, Sun→3, Mon→4, Tue→5, Wed→6
+        py_weekday = invoice_date.weekday()  # 0=Mon ... 6=Sun
+        # Convert to days since Thursday: Thu=3→0, Fri=4→1, Sat=5→2, Sun=6→3, Mon=0→4, Tue=1→5, Wed=2→6
+        days_since_thursday = (py_weekday - 3) % 7
+        
+        # Week start (Thursday of invoice's week)
+        week_start = invoice_date - timedelta(days=days_since_thursday)
+        
+        # Late fee deadline: next Thursday at 23:59 (7 days after week start)
+        late_fee_deadline = datetime.combine(
+            week_start + timedelta(days=7),  # Next Thursday
+            datetime.max.time()  # 23:59:59.999999
+        ).replace(tzinfo=timezone.utc)
+        
+        if now < late_fee_deadline:
+            return invoice  # Deadline not yet passed
     except Exception:
         return invoice
     

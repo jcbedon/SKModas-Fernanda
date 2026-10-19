@@ -83,56 +83,50 @@ export default function AdminShipments() {
   const [customerFilter, setCustomerFilter] = useState("");
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
-  // Default week filter = current week (Monday 12:00 → next Monday 11:59:59).
+  // Default week filter = current week (Thursday 00:00 → Wednesday 23:59).
+  // Shipments close Wednesday 23:59 and new week opens Thursday 00:00.
   const getCurrentWeekKey = () => {
     const d = new Date();
-    const day = d.getDay();
-    const daysSinceMonday = (day - 1 + 7) % 7;
-    const candidate = new Date(d);
-    candidate.setDate(d.getDate() - daysSinceMonday);
-    candidate.setHours(12, 0, 0, 0);
-    if (candidate > d) {
-      candidate.setDate(candidate.getDate() - 7);
-    }
-    return candidate.toISOString().slice(0, 10);
+    // Snap to local midnight
+    const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    // JS getDay(): 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday.
+    // Days back to Thursday: Thu→0, Fri→1, Sat→2, Sun→3, Mon→4, Tue→5, Wed→6.
+    const jsDay = local.getDay();
+    const daysSinceThursday = (jsDay - 4 + 7) % 7;
+    local.setDate(local.getDate() - daysSinceThursday);
+    const y = local.getFullYear();
+    const m = String(local.getMonth() + 1).padStart(2, "0");
+    const day = String(local.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
   };
   // Week key for an arbitrary date (used by the courier PDF export and filters).
-  // Must live at component scope so handlers like handleExportCourierManifest
-  // can reference it (previously it was only defined inside nested render IIFEs,
-  // causing "ReferenceError: getWeekKey is not defined" when exporting the PDF).
   const getWeekKey = (dateStr) => {
     const d = new Date(dateStr);
-    const day = d.getDay();
-    const daysSinceMonday = (day - 1 + 7) % 7;
-    const candidate = new Date(d);
-    candidate.setDate(d.getDate() - daysSinceMonday);
-    candidate.setHours(12, 0, 0, 0);
-    if (candidate > d) {
-      candidate.setDate(candidate.getDate() - 7);
-    }
-    return candidate.toISOString().slice(0, 10);
+    if (isNaN(d.getTime())) return null;
+    const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const jsDay = local.getDay();
+    const daysSinceThursday = (jsDay - 4 + 7) % 7;
+    local.setDate(local.getDate() - daysSinceThursday);
+    const y = local.getFullYear();
+    const m = String(local.getMonth() + 1).padStart(2, "0");
+    const day = String(local.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
   };
-  // Human label for the week that contains `dateStr` (component scope so the
-  // PDF export handler can use it without the render-only `weekList`).
+  // Human label for the week that contains `dateStr`
   const getWeekLabel = (dateStr) => {
-    const d = new Date(dateStr);
-    const day = d.getDay();
-    const daysSinceMonday = (day - 1 + 7) % 7;
-    const startMonday = new Date(d);
-    startMonday.setDate(d.getDate() - daysSinceMonday);
-    startMonday.setHours(12, 0, 0, 0);
-    if (startMonday > d) {
-      startMonday.setDate(startMonday.getDate() - 7);
-    }
-    const endMonday = new Date(startMonday);
-    endMonday.setDate(startMonday.getDate() + 7);
+    const key = getWeekKey(dateStr);
+    if (!key) return "—";
+    const [y, m, d] = key.split("-").map(Number);
+    const startThursday = new Date(y, m - 1, d);
+    const endWednesday = new Date(startThursday);
+    endWednesday.setDate(startThursday.getDate() + 6);
     const fmt = (dt) => {
       const dayN = dt.getDate();
       const monthRaw = dt.toLocaleDateString("es-ES", { month: "long" });
       const month = monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1);
       return `${dayN}-${month}`;
     };
-    return `Lunes ${fmt(startMonday)} - Lunes ${fmt(endMonday)}`;
+    return `Jueves ${fmt(startThursday)} - Miércoles ${fmt(endWednesday)}`;
   };
   const [weekFilter, setWeekFilter] = useState(() => getCurrentWeekKey());
   // Courier (paquetería) pricing — used to compute "Pago a Empresa Paquetería"

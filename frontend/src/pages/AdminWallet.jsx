@@ -23,19 +23,19 @@ import QRCode from "qrcode";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 
-// Weekly cycle: MONDAY 00:00 local → SUNDAY 23:59 local (Mon-Sun window).
-// Recharge filter closes Sunday 11:59 PM and reopens Monday 00:00 AM.
+// Weekly cycle: THURSDAY 00:00 local → WEDNESDAY 23:59 local (Thu-Wed window).
+// Recharge filter closes Wednesday 23:59 and reopens Thursday 00:00.
 const getWeekKey = (dateStr) => {
   if (!dateStr) return null;
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return null;
   // Snap to local midnight first so we bucket by calendar day, not by hour.
   const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  // JS getDay(): 0=Sunday, 1=Monday, ..., 6=Saturday.
-  // Days back to Monday: Sun→6, Mon→0, Tue→1, ..., Sat→5.
+  // JS getDay(): 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday.
+  // Days back to Thursday: Thu→0, Fri→1, Sat→2, Sun→3, Mon→4, Tue→5, Wed→6.
   const jsDay = local.getDay();
-  const daysSinceMonday = jsDay === 0 ? 6 : jsDay - 1;
-  local.setDate(local.getDate() - daysSinceMonday);
+  const daysSinceThursday = (jsDay - 4 + 7) % 7;
+  local.setDate(local.getDate() - daysSinceThursday);
   // Encode key as local YYYY-MM-DD (avoid toISOString which drifts by TZ).
   const y = local.getFullYear();
   const m = String(local.getMonth() + 1).padStart(2, "0");
@@ -47,17 +47,17 @@ const getWeekLabel = (dateStr) => {
   const key = getWeekKey(dateStr);
   if (!key) return "—";
   const [y, m, d] = key.split("-").map(Number);
-  const startMonday = new Date(y, m - 1, d);
-  // Inclusive endpoints: Monday → Sunday of the same 7-day window.
-  const endSunday = new Date(startMonday);
-  endSunday.setDate(startMonday.getDate() + 6);
+  const startThursday = new Date(y, m - 1, d);
+  // Inclusive endpoints: Thursday → Wednesday of the same 7-day window.
+  const endWednesday = new Date(startThursday);
+  endWednesday.setDate(startThursday.getDate() + 6);
   const fmt = (dt) => {
     const day = dt.getDate();
     const monthRaw = dt.toLocaleDateString('es-ES', { month: 'short' });
     const month = monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1).replace('.', '');
     return `${day} ${month}`;
   };
-  return `${fmt(startMonday)} - ${fmt(endSunday)}`;
+  return `${fmt(startThursday)} - ${fmt(endWednesday)}`;
 };
 
 const getCurrentWeekKey = () => getWeekKey(new Date().toISOString());

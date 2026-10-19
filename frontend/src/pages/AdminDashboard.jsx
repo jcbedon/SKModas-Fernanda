@@ -37,19 +37,23 @@ import AstridHeroBanner from "@/components/AstridHeroBanner";
 import { useHideFinancials } from "@/components/MoneyDisplay";
 const DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_compraenvivo/artifacts/qvyfsb43_WhatsApp%20Image%202026-02-03%20at%208.05.08%20PM.jpeg";
 
-// Week boundary: Monday 12:00 local → next Monday 11:59:59 local.
+// Week boundary: Thursday 00:00 local → Wednesday 23:59 local.
 // Returns { startISO, endISO, label } for `weeksBack` weeks ago (0 = current week).
 function getWeekRange(weeksBack = 0) {
   const now = new Date();
-  const day = now.getDay(); // 0 Sun .. 6 Sat
-  const daysSinceMonday = (day - 1 + 7) % 7;
-  const start = new Date(now);
-  start.setDate(now.getDate() - daysSinceMonday);
-  start.setHours(12, 0, 0, 0);
-  if (start > now) start.setDate(start.getDate() - 7); // before noon Monday → previous week
+  // Snap to local midnight
+  const local = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // JS getDay(): 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday.
+  // Days back to Thursday: Thu→0, Fri→1, Sat→2, Sun→3, Mon→4, Tue→5, Wed→6.
+  const jsDay = local.getDay();
+  const daysSinceThursday = (jsDay - 4 + 7) % 7;
+  const start = new Date(local);
+  start.setDate(local.getDate() - daysSinceThursday);
+  start.setHours(0, 0, 0, 0);
   start.setDate(start.getDate() - weeksBack * 7);
   const end = new Date(start);
-  end.setDate(start.getDate() + 7);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
   const fmt = (dt) => {
     const d = dt.getDate();
     const monthRaw = dt.toLocaleDateString("es-ES", { month: "short" });

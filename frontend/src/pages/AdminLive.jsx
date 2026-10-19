@@ -72,35 +72,39 @@ const DEFAULT_TAX_OPTIONS = [
   { value: "other", label: "Otro" }
 ];
 
-// Week boundary helper: Monday 12:00 local → next Monday 11:59:59 local.
+// Week boundary helper: Thursday 00:00 local → Wednesday 23:59 local.
 // Same logic used in AdminShipments, AdminWallet, ClientDashboard.
 const getWeekKey = (dateStr) => {
   if (!dateStr) return null;
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return null;
-  const day = d.getDay();
-  const daysSinceMonday = (day - 1 + 7) % 7;
-  const candidate = new Date(d);
-  candidate.setDate(d.getDate() - daysSinceMonday);
-  candidate.setHours(12, 0, 0, 0);
-  if (candidate > d) candidate.setDate(candidate.getDate() - 7);
-  return candidate.toISOString().slice(0, 10);
+  // Snap to local midnight
+  const local = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  // JS getDay(): 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday.
+  // Days back to Thursday: Thu→0, Fri→1, Sat→2, Sun→3, Mon→4, Tue→5, Wed→6.
+  const jsDay = local.getDay();
+  const daysSinceThursday = (jsDay - 4 + 7) % 7;
+  local.setDate(local.getDate() - daysSinceThursday);
+  const y = local.getFullYear();
+  const m = String(local.getMonth() + 1).padStart(2, "0");
+  const day = String(local.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 };
 
 const getWeekLabel = (dateStr) => {
   const key = getWeekKey(dateStr);
   if (!key) return "—";
   const [y, m, d] = key.split("-").map(Number);
-  const startMonday = new Date(y, m - 1, d, 12, 0, 0);
-  const endMonday = new Date(startMonday);
-  endMonday.setDate(startMonday.getDate() + 7);
+  const startThursday = new Date(y, m - 1, d);
+  const endWednesday = new Date(startThursday);
+  endWednesday.setDate(startThursday.getDate() + 6);
   const fmt = (dt) => {
     const day = dt.getDate();
     const monthRaw = dt.toLocaleDateString('es-ES', { month: 'short' });
     const month = monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1).replace('.', '');
     return `${day} ${month}`;
   };
-  return `${fmt(startMonday)} - ${fmt(endMonday)}`;
+  return `${fmt(startThursday)} - ${fmt(endWednesday)}`;
 };
 
 const getCurrentWeekKey = () => getWeekKey(new Date().toISOString());
