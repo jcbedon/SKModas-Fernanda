@@ -5285,9 +5285,8 @@ async def update_manual_commission(live_id: str, data: dict, current_user: dict 
 @api_router.put("/lives/{live_id}/remove-all-taxes")
 async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(get_current_user)):
     """
-    Remove taxes from ALL purchases in a Live.
-    Sets tax_amount = 0, tax_rate = 0, tax_percent = 0 for all purchases and updates Live totals.
-    Use this to bulk-edit a Live that was created with taxes but shouldn't have them.
+    Remove taxes from ALL purchases in a Live and recalculate prices.
+    Sets tax fields to 0 and recalculates totals without tax.
     """
     if current_user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Solo administradores pueden realizar esta acción")
@@ -5297,6 +5296,9 @@ async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(
     if not live:
         raise HTTPException(status_code=404, detail="Live no encontrado")
     
+    # Get the tax rate that was applied to this live
+    live_tax_rate = live.get("tax_rate") or 0
+    
     # Get all purchases for this live
     purchases = await db.purchases.find(
         {"live_id": live_id, "tenant_id": tid}
@@ -5305,26 +5307,58 @@ async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(
     if not purchases:
         return {"message": "No hay compras en este Live", "updated_count": 0}
     
-    # Calculate total taxes being removed
-    total_taxes_removed = sum(p.get("tax_amount", 0) or 0 for p in purchases)
+    updated_count = 0
+    total_taxes_removed = 0
+    new_total_sales = 0
     
-    # Update all purchases: set ALL tax fields to 0/null
-    result = await db.purchases.update_many(
-        {"live_id": live_id, "tenant_id": tid},
-        {"$set": {
-            "tax_amount": 0,
-            "tax_rate": 0,
-            "tax_percent": 0,
-            "tax": 0,
-            "tax_type": None,
-            "tax_label": None
-        }}
-    )
+    for purchase in purchases:
+        purchase_id = purchase.get("id")
+        
+        # Get current values
+        current_price = purchase.get("price", 0) or 0
+        current_tax_amount = purchase.get("tax_amount", 0) or 0
+        current_tax_rate = purchase.get("tax_rate", 0) or purchase.get("tax_percent", 0) or 0
+        commission = purchase.get("commission", 0) or 0
+        
+        # If tax_amount exists, the price might already be without tax
+        # If no tax_amount but tax_rate exists, price might include tax
+        
+        # Calculate original price (before tax was added)
+        # If tax was calculated as: total = price * (1 + tax_rate/100)
+        # Then: original_price = total / (1 + tax_rate/100)
+        
+        original_price = current_price
+        if current_tax_rate > 0 and current_tax_amount == 0:
+            # Tax was included in price, need to extract it
+            original_price = round(current_price / (1 + current_tax_rate / 100), 2)
+            current_tax_amount = round(current_price - original_price, 2)
+        
+        total_taxes_removed += current_tax_amount
+        
+        # New price is original price (without tax)
+        new_price = original_price
+        new_total_sales += new_price + commission
+        
+        # Update purchase
+        await db.purchases.update_one(
+            {"id": purchase_id, "tenant_id": tid},
+            {"$set": {
+                "price": new_price,
+                "tax_amount": 0,
+                "tax_rate": 0,
+                "tax_percent": 0,
+                "tax": 0,
+                "tax_type": None,
+                "tax_label": None
+            }}
+        )
+        updated_count += 1
     
-    # Update the Live: remove tax_rate and total_taxes_paid
+    # Update the Live totals
     await db.lives.update_one(
         {"id": live_id, "tenant_id": tid},
         {"$set": {
+            "total_sales": round(new_total_sales, 2),
             "total_taxes_paid": 0,
             "tax_rate": None,
             "apply_tax": False
@@ -5332,9 +5366,10 @@ async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(
     )
     
     return {
-        "message": f"Taxes removidos de {result.modified_count} productos",
-        "updated_count": result.modified_count,
+        "message": f"Taxes removidos y precios recalculados para {updated_count} productos",
+        "updated_count": updated_count,
         "total_taxes_removed": round(total_taxes_removed, 2),
+        "new_total_sales": round(new_total_sales, 2),
         "live_id": live_id,
         "live_title": live.get("title", "")
     }
