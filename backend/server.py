@@ -5282,6 +5282,52 @@ async def update_manual_commission(live_id: str, data: dict, current_user: dict 
         "note": note
     }
 
+@api_router.put("/lives/{live_id}/remove-all-taxes")
+async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(get_current_user)):
+    """
+    Remove taxes from ALL purchases in a Live.
+    Sets tax_amount = 0 for all purchases and updates Live totals.
+    Use this to bulk-edit a Live that was created with taxes but shouldn't have them.
+    """
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden realizar esta acción")
+    
+    tid = current_user["tenant_id"]
+    live = await db.lives.find_one({"id": live_id, "tenant_id": tid}, {"_id": 0})
+    if not live:
+        raise HTTPException(status_code=404, detail="Live no encontrado")
+    
+    # Get all purchases for this live
+    purchases = await db.purchases.find(
+        {"live_id": live_id, "tenant_id": tid}
+    ).to_list(None)
+    
+    if not purchases:
+        return {"message": "No hay compras en este Live", "updated_count": 0}
+    
+    # Calculate total taxes being removed
+    total_taxes_removed = sum(p.get("tax_amount", 0) or 0 for p in purchases)
+    
+    # Update all purchases: set tax_amount = 0
+    result = await db.purchases.update_many(
+        {"live_id": live_id, "tenant_id": tid},
+        {"$set": {"tax_amount": 0}}
+    )
+    
+    # Update the Live's total_taxes_paid to 0
+    await db.lives.update_one(
+        {"id": live_id, "tenant_id": tid},
+        {"$set": {"total_taxes_paid": 0}}
+    )
+    
+    return {
+        "message": f"Taxes removidos de {result.modified_count} productos",
+        "updated_count": result.modified_count,
+        "total_taxes_removed": round(total_taxes_removed, 2),
+        "live_id": live_id,
+        "live_title": live.get("title", "")
+    }
+
 @api_router.post("/lives/{live_id}/generate-upload-qr")
 async def generate_upload_qr(live_id: str, current_user: dict = Depends(get_current_user)):
     """Generate a temporary token for mobile upload via QR code"""
