@@ -1519,7 +1519,7 @@ export default function AdminLive() {
             {/* Purchases List - RIGHT */}
             <div>
               <Card className="rounded-2xl h-[calc(100vh-160px)] flex flex-col">
-                <CardHeader className="pb-2 shrink-0">
+                <CardHeader className="pb-2 shrink-0 max-h-[280px] overflow-hidden">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg" data-testid="live-purchases-title">Compras del Live ({purchases.length})</CardTitle>
                     <div className="flex items-center gap-2">
@@ -1566,7 +1566,7 @@ export default function AdminLive() {
                           <span className="font-semibold">{sortedClients.length} clientes</span>
                           <span>{reviewedCount}/{sortedClients.length} revisados</span>
                         </div>
-                        <div className="max-h-[180px] overflow-y-auto divide-y divide-slate-100">
+                        <div className="max-h-[120px] overflow-y-auto divide-y divide-slate-100">
                           {filteredGroupClients.map(([cid, info]) => {
                             const isExpanded = expandedClient === cid;
                             const isReviewed = !!reviewedClients[cid];
@@ -1627,8 +1627,8 @@ export default function AdminLive() {
                     />
                   </div>
                 </CardHeader>
-                <CardContent className="p-4 pt-0 flex-1 min-h-0">
-                  <ScrollArea className="h-full">
+                <CardContent className="p-4 pt-0 flex-1 overflow-hidden">
+                  <ScrollArea className="h-full pr-2">
                     {(() => {
                       let filtered = purchases;
                       // If a client is selected from the summary, filter to that client
