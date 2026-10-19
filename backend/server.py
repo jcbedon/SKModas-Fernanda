@@ -158,10 +158,13 @@ async def _ensure_indexes():
 
 
 async def _auto_close_lives_scheduler():
-    """Every Monday at 12:00 local Ecuador time (UTC-5 → 17:00 UTC), close any
+    """Every Wednesday at 23:59 local Ecuador time (UTC-5), close any
     live whose status is "active". Runs once per minute, fires exactly once per
-    Monday-noon transition. Robust against restarts: a per-week guard on the
+    Wednesday-midnight transition. Robust against restarts: a per-week guard on the
     database (`system_state.lives_auto_closed_week`) prevents double-runs.
+    
+    Week cycle: Thursday 00:00 → Wednesday 23:59
+    Lives auto-close at end of week (Wednesday 23:59)
     """
     import asyncio as _asyncio
     from datetime import datetime as _dt, timezone as _tz
@@ -170,9 +173,9 @@ async def _auto_close_lives_scheduler():
             now_utc = _dt.now(_tz.utc)
             # Convert UTC time to local Ecuador (UTC-5) without external tz deps
             local_now = now_utc - timedelta(hours=5)
-            # weekday: Monday=0
-            if local_now.weekday() == 0 and local_now.hour == 12:
-                # Compute a stable week-bucket key (yyyy-mm-dd of this Monday-noon)
+            # weekday: Wednesday=2, check at 23:00 hour (we run hourly check in the 23:xx window)
+            if local_now.weekday() == 2 and local_now.hour == 23:
+                # Compute a stable week-bucket key (yyyy-mm-dd of this Wednesday)
                 week_key = local_now.strftime("%Y-%m-%d")
                 state = await db.system_state.find_one({"_id": "lives_auto_closed"}, {"_id": 1, "week": 1})
                 already_done = state and state.get("week") == week_key
@@ -208,7 +211,7 @@ async def _auto_close_lives_scheduler():
                         pass
         except Exception as _err:
             logger.warning(f"[auto_close_lives] iteration failed: {_err}")
-        # Sleep ~60s. We accept a 1-minute drift around 12:00 (acceptable).
+        # Sleep ~60s. We accept a 1-minute drift around 23:00 (acceptable).
         await _asyncio.sleep(60)
 api_router = APIRouter(prefix="/api")
 
@@ -5360,6 +5363,50 @@ async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(
         "new_total_sales": round(new_total_sales, 2),
         "live_id": live_id,
         "live_title": live.get("title", "")
+    }
+
+@api_router.put("/lives/{live_id}/reactivate")
+async def reactivate_live(live_id: str, current_user: dict = Depends(get_current_user)):
+    """Reactivate a closed/completed Live back to active status"""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden reactivar Lives")
+    
+    tid = current_user["tenant_id"]
+    live = await db.lives.find_one({"id": live_id, "tenant_id": tid}, {"_id": 0})
+    if not live:
+        raise HTTPException(status_code=404, detail="Live no encontrado")
+    
+    if live.get("status") == "active":
+        return {"message": "El Live ya está activo", "live_id": live_id}
+    
+    await db.lives.update_one(
+        {"id": live_id, "tenant_id": tid},
+        {"$set": {"status": "active"}, "$unset": {"ended_at": "", "auto_closed": ""}}
+    )
+    
+    return {
+        "message": "Live reactivado exitosamente",
+        "live_id": live_id,
+        "live_title": live.get("title", "")
+    }
+
+@api_router.put("/lives/reactivate-all-auto-closed")
+async def reactivate_all_auto_closed_lives(current_user: dict = Depends(get_current_user)):
+    """Reactivate all Lives that were auto-closed by the system"""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden reactivar Lives")
+    
+    tid = current_user["tenant_id"]
+    
+    # Find and reactivate all auto-closed lives for this tenant
+    result = await db.lives.update_many(
+        {"tenant_id": tid, "auto_closed": True},
+        {"$set": {"status": "active"}, "$unset": {"ended_at": "", "auto_closed": ""}}
+    )
+    
+    return {
+        "message": f"Se reactivaron {result.modified_count} Lives",
+        "reactivated_count": result.modified_count
     }
 
 @api_router.post("/lives/{live_id}/generate-upload-qr")
