@@ -111,18 +111,18 @@ export default function ClientBalanceReport() {
     if (filterType === "day") {
       return { date_from: selectedDay, date_to: selectedDay };
     } else {
-      // Week: Monday to Sunday
+      // Week: Thursday to Wednesday
       const [y, m, d] = selectedWeek.split("-").map(Number);
-      const monday = new Date(y, m - 1, d);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
+      const thursday = new Date(y, m - 1, d);
+      const wednesday = new Date(thursday);
+      wednesday.setDate(thursday.getDate() + 6);
       const toKey = (dt) => {
         const yy = dt.getFullYear();
         const mm = String(dt.getMonth() + 1).padStart(2, "0");
         const dd = String(dt.getDate()).padStart(2, "0");
         return `${yy}-${mm}-${dd}`;
       };
-      return { date_from: toKey(monday), date_to: toKey(sunday) };
+      return { date_from: toKey(thursday), date_to: toKey(wednesday) };
     }
   }, [filterType, selectedWeek, selectedDay]);
 

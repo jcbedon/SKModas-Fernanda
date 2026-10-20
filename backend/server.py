@@ -3646,20 +3646,14 @@ async def get_client_balance_report(
         raise HTTPException(status_code=403, detail="No autorizado")
     tid = current_user["tenant_id"]
     
-    # Parse date filters
-    date_filter = {}
+    # Parse date filters - use ISO string comparison for MongoDB
+    date_filter_str = {}
     if date_from:
-        try:
-            from_dt = datetime.strptime(date_from, "%Y-%m-%d").replace(hour=0, minute=0, second=0)
-            date_filter["$gte"] = from_dt
-        except ValueError:
-            pass
+        # Start of day in ISO format
+        date_filter_str["$gte"] = f"{date_from}T00:00:00"
     if date_to:
-        try:
-            to_dt = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
-            date_filter["$lte"] = to_dt
-        except ValueError:
-            pass
+        # End of day in ISO format
+        date_filter_str["$lte"] = f"{date_to}T23:59:59"
     
     # Get all active clients
     clients = await db.users.find(
@@ -3681,8 +3675,8 @@ async def get_client_balance_report(
         "status": "approved",
         "is_deleted": {"$ne": True}
     }
-    if date_filter:
-        deposit_match["created_at"] = date_filter
+    if date_filter_str:
+        deposit_match["created_at"] = date_filter_str
     
     # Get approved deposits (recharges) per client
     deposits_agg = await db.wallet_transactions.aggregate([
@@ -3697,8 +3691,8 @@ async def get_client_balance_report(
         "user_id": {"$in": client_ids},
         "status": {"$in": ["pending", "confirmed", "invoiced"]}  # Include pending too
     }
-    if date_filter:
-        purchases_match["created_at"] = date_filter
+    if date_filter_str:
+        purchases_match["created_at"] = date_filter_str
     
     # Get purchases (consumido) per client - all purchases in period
     purchases_agg = await db.purchases.aggregate([
