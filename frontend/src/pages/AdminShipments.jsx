@@ -222,10 +222,13 @@ export default function AdminShipments() {
   const [selectedPurchases, setSelectedPurchases] = useState([]);
   const [clientSearch, setClientSearch] = useState("");
   const [attachmentFiles, setAttachmentFiles] = useState([]);
+  
+  // Multiple packages support
+  const [packages, setPackages] = useState([
+    { id: 1, shipping_category: "", custom_unit_cost: "", package_count: "1" }
+  ]);
+  
   const [shipmentForm, setShipmentForm] = useState({
-    shipping_category: "",  // "G" | "A" | "B" | "OTHER"
-    custom_unit_cost: "",   // Only used when category === "OTHER"
-    package_count: "1",
     address: "",
     country: "",
     phone: "",
@@ -417,25 +420,51 @@ export default function AdminShipments() {
     }
   };
 
-  const getUnitCost = () => {
-    if (!shipmentForm.shipping_category) return 0;
-    if (shipmentForm.shipping_category === "OTHER") {
-      return parseFloat(shipmentForm.custom_unit_cost) || 0;
+  // Package management functions
+  const addPackage = () => {
+    const newId = Math.max(...packages.map(p => p.id)) + 1;
+    setPackages([...packages, { id: newId, shipping_category: "", custom_unit_cost: "", package_count: "1" }]);
+  };
+
+  const removePackage = (id) => {
+    if (packages.length <= 1) return;
+    setPackages(packages.filter(p => p.id !== id));
+  };
+
+  const updatePackage = (id, field, value) => {
+    setPackages(packages.map(p => p.id === id ? { ...p, [field]: value } : p));
+  };
+
+  const getPackageUnitCost = (pkg) => {
+    if (!pkg.shipping_category) return 0;
+    if (pkg.shipping_category === "OTHER") {
+      return parseFloat(pkg.custom_unit_cost) || 0;
     }
-    const cat = tenantSettings.shipping_categories.find(c => c.key === shipmentForm.shipping_category);
+    const cat = tenantSettings.shipping_categories.find(c => c.key === pkg.shipping_category);
     if (!cat) return 0;
     const priceField = tenantSettings.shipping_mode === "pounds" ? "value_pounds" : "value_packages";
     const price = cat[priceField] ?? cat.value ?? 0;
     return parseFloat(price) || 0;
   };
 
-  const getTotalShippingCost = () => {
-    const unit = getUnitCost();
-    const rawQty = parseFloat(shipmentForm.package_count) || 1;
+  const getPackageCost = (pkg) => {
+    const unit = getPackageUnitCost(pkg);
+    const rawQty = parseFloat(pkg.package_count) || 1;
     const qty = tenantSettings.shipping_mode === "pounds"
       ? Math.max(rawQty, 0.01)
       : Math.max(Math.round(rawQty), 1);
     return Math.round(unit * qty * 100) / 100;
+  };
+
+  const getTotalShippingCost = () => {
+    return packages.reduce((sum, pkg) => sum + getPackageCost(pkg), 0);
+  };
+
+  const getTotalPackageCount = () => {
+    return packages.reduce((sum, pkg) => {
+      const rawQty = parseFloat(pkg.package_count) || 0;
+      return sum + (tenantSettings.shipping_mode === "pounds" ? rawQty : Math.round(rawQty));
+    }, 0);
   };
 
   const handleCreateShipment = async () => {
@@ -449,23 +478,24 @@ export default function AdminShipments() {
       toast.error("Selecciona una factura para este envío");
       return;
     }
-    if (!shipmentForm.shipping_category) {
-      toast.error("Selecciona una categoría de envío");
-      return;
-    }
-    if (shipmentForm.shipping_category === "OTHER") {
-      const v = parseFloat(shipmentForm.custom_unit_cost);
-      if (isNaN(v) || v < 0) {
-        toast.error("Ingresa un costo personalizado válido");
+    
+    // Validate all packages
+    for (const pkg of packages) {
+      if (!pkg.shipping_category) {
+        toast.error("Selecciona una categoría para todos los paquetes");
         return;
       }
+      if (pkg.shipping_category === "OTHER") {
+        const v = parseFloat(pkg.custom_unit_cost);
+        if (isNaN(v) || v < 0) {
+          toast.error("Ingresa un costo personalizado válido para todos los paquetes");
+          return;
+        }
+      }
     }
-    const rawQty = parseFloat(shipmentForm.package_count) || 1;
-    const packageCount = tenantSettings.shipping_mode === "pounds"
-      ? Math.max(rawQty, 0.01)
-      : Math.max(Math.round(rawQty), 1);
-    const unitCost = getUnitCost();
-    const totalCost = Math.round(unitCost * packageCount * 100) / 100;
+    
+    const totalCost = getTotalShippingCost();
+    const totalPackages = getTotalPackageCount();
 
     // Shipment purchases come from the selected invoice
     const purchasesToSend = (selectedInvoice?.purchases || pendingPurchases).map(p => p.id);
@@ -475,13 +505,28 @@ export default function AdminShipments() {
     }
 
     try {
+      // Build packages array for backend
+      const packagesData = packages.map(pkg => ({
+        shipping_category: pkg.shipping_category,
+        unit_cost: getPackageUnitCost(pkg),
+        package_count: tenantSettings.shipping_mode === "pounds" 
+          ? parseFloat(pkg.package_count) || 1
+          : Math.max(Math.round(parseFloat(pkg.package_count) || 1), 1),
+        cost: getPackageCost(pkg)
+      }));
+      
+      // Use first package category as main category for backward compatibility
+      const mainCategory = packages[0]?.shipping_category || "";
+      const mainUnitCost = getPackageUnitCost(packages[0]);
+      
       const response = await createShipment({
         user_id: selectedClient.id,
         purchase_ids: purchasesToSend,
-        shipping_category: shipmentForm.shipping_category,
-        shipping_unit_cost: unitCost,
+        shipping_category: mainCategory,
+        shipping_unit_cost: mainUnitCost,
         shipping_cost: totalCost,
-        package_count: packageCount,
+        package_count: totalPackages,
+        packages: packagesData,  // New: array of packages
         address: shipmentForm.address,
         country: shipmentForm.country,
         phone: shipmentForm.phone,
@@ -528,10 +573,8 @@ export default function AdminShipments() {
       setAttachmentFiles([]);
       setSelectedInvoice(null);
       setClientInvoices([]);
+      setPackages([{ id: 1, shipping_category: "", custom_unit_cost: "", package_count: "1" }]);
       setShipmentForm({
-        shipping_category: "",
-        custom_unit_cost: "",
-        package_count: "1",
         address: "",
         country: "",
         phone: "",
@@ -1014,80 +1057,121 @@ export default function AdminShipments() {
                       </div>
                     )}
 
-                    {/* Shipping Category */}
-                    <div>
-                      <Label>Categoría de Envío *</Label>
-                      <Select
-                        value={shipmentForm.shipping_category}
-                        onValueChange={(value) => setShipmentForm({ ...shipmentForm, shipping_category: value })}
-                      >
-                        <SelectTrigger className="h-12 rounded-xl mt-1" data-testid="select-shipping-category">
-                          <SelectValue placeholder="Selecciona una categoría" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {tenantSettings.shipping_categories.map((cat) => {
-                            const unit = tenantSettings.shipping_mode === "pounds" ? "libra" : "paquete";
-                            const priceField = tenantSettings.shipping_mode === "pounds" ? "value_pounds" : "value_packages";
-                            const price = cat[priceField] ?? cat.value ?? 0;
-                            return (
-                              <SelectItem key={cat.key} value={cat.key} data-testid={`category-${cat.key}`}>
-                                {cat.label} — ${Number(price).toFixed(2)} / {unit}
-                              </SelectItem>
-                            );
-                          })}
-                          <SelectItem value="OTHER" data-testid="category-OTHER">Otro (costo personalizado)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Custom Unit Cost (only when OTHER) */}
-                    {shipmentForm.shipping_category === "OTHER" && (
-                      <div>
-                        <Label>Costo por {tenantSettings.shipping_mode === "pounds" ? "libra" : "paquete"} (USD) *</Label>
-                        <Input
-                          type="number"
-                          inputMode="decimal"
-                          step="0.01"
-                          min="0"
-                          placeholder="Ej: 35.00"
-                          value={shipmentForm.custom_unit_cost}
-                          onChange={(e) => setShipmentForm({ ...shipmentForm, custom_unit_cost: e.target.value })}
-                          onWheel={(e) => e.target.blur()}
-                          className="h-12 rounded-xl mt-1"
-                          data-testid="custom-unit-cost-input"
-                        />
+                    {/* Multiple Packages Section */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-base font-semibold">Paquetes *</Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={addPackage}
+                          className="rounded-xl text-xs gap-1"
+                          data-testid="add-package-btn"
+                        >
+                          <Plus className="h-3 w-3" /> Agregar Paquete
+                        </Button>
                       </div>
-                    )}
-
-                    {/* Quantity (packages or pounds) */}
-                    <div>
-                      <Label>Número de {tenantSettings.shipping_mode === "pounds" ? "Libras" : "Paquetes"} *</Label>
-                      <Input
-                        type="number"
-                        inputMode={tenantSettings.shipping_mode === "pounds" ? "decimal" : "numeric"}
-                        step={tenantSettings.shipping_mode === "pounds" ? "0.01" : "1"}
-                        min={tenantSettings.shipping_mode === "pounds" ? "0.1" : "1"}
-                        placeholder={tenantSettings.shipping_mode === "pounds" ? "Ej: 3.5" : "Ej: 2"}
-                        value={shipmentForm.package_count}
-                        onChange={(e) => setShipmentForm({ ...shipmentForm, package_count: e.target.value })}
-                        onWheel={(e) => e.target.blur()}
-                        className="h-12 rounded-xl mt-1"
-                        data-testid="shipping-package-count-input"
-                      />
+                      
+                      {packages.map((pkg, index) => (
+                        <div key={pkg.id} className="border rounded-xl p-3 space-y-3 bg-slate-50">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-slate-600">Paquete {index + 1}</span>
+                            {packages.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removePackage(pkg.id)}
+                                className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3">
+                            {/* Category */}
+                            <div>
+                              <Label className="text-xs">Categoría</Label>
+                              <Select
+                                value={pkg.shipping_category}
+                                onValueChange={(value) => updatePackage(pkg.id, "shipping_category", value)}
+                              >
+                                <SelectTrigger className="h-10 rounded-lg mt-1" data-testid={`select-category-${pkg.id}`}>
+                                  <SelectValue placeholder="Categoría" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {tenantSettings.shipping_categories.map((cat) => {
+                                    const unit = tenantSettings.shipping_mode === "pounds" ? "lb" : "paq";
+                                    const priceField = tenantSettings.shipping_mode === "pounds" ? "value_pounds" : "value_packages";
+                                    const price = cat[priceField] ?? cat.value ?? 0;
+                                    return (
+                                      <SelectItem key={cat.key} value={cat.key}>
+                                        {cat.label} — ${Number(price).toFixed(2)}/{unit}
+                                      </SelectItem>
+                                    );
+                                  })}
+                                  <SelectItem value="OTHER">Otro</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            {/* Quantity */}
+                            <div>
+                              <Label className="text-xs">{tenantSettings.shipping_mode === "pounds" ? "Libras" : "Cantidad"}</Label>
+                              <Input
+                                type="number"
+                                inputMode={tenantSettings.shipping_mode === "pounds" ? "decimal" : "numeric"}
+                                step={tenantSettings.shipping_mode === "pounds" ? "0.01" : "1"}
+                                min={tenantSettings.shipping_mode === "pounds" ? "0.1" : "1"}
+                                placeholder="1"
+                                value={pkg.package_count}
+                                onChange={(e) => updatePackage(pkg.id, "package_count", e.target.value)}
+                                onWheel={(e) => e.target.blur()}
+                                className="h-10 rounded-lg mt-1"
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* Custom cost for OTHER */}
+                          {pkg.shipping_category === "OTHER" && (
+                            <div>
+                              <Label className="text-xs">Costo por {tenantSettings.shipping_mode === "pounds" ? "libra" : "paquete"} ($)</Label>
+                              <Input
+                                type="number"
+                                inputMode="decimal"
+                                step="0.01"
+                                min="0"
+                                placeholder="35.00"
+                                value={pkg.custom_unit_cost}
+                                onChange={(e) => updatePackage(pkg.id, "custom_unit_cost", e.target.value)}
+                                onWheel={(e) => e.target.blur()}
+                                className="h-10 rounded-lg mt-1"
+                              />
+                            </div>
+                          )}
+                          
+                          {/* Package subtotal */}
+                          {pkg.shipping_category && (
+                            <div className="flex justify-between items-center text-sm bg-white rounded-lg px-3 py-2">
+                              <span className="text-slate-500">
+                                {parseFloat(pkg.package_count) || 1} × ${getPackageUnitCost(pkg).toFixed(2)}
+                              </span>
+                              <span className="font-semibold text-slate-700">${getPackageCost(pkg).toFixed(2)}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
 
                     {/* Total Cost */}
-                    {shipmentForm.shipping_category && (
+                    {packages.some(p => p.shipping_category) && (
                       <div className="bg-gradient-to-r from-[#1E3A5F] to-[#2a4a73] rounded-xl p-4 text-white">
                         <div className="flex justify-between items-center">
                           <div>
                             <p className="text-sm text-white/80">
-                              {(() => {
-                                const rawQty = parseFloat(shipmentForm.package_count) || 1;
-                                const qty = tenantSettings.shipping_mode === "pounds" ? rawQty : Math.max(Math.round(rawQty), 1);
-                                const unit = tenantSettings.shipping_mode === "pounds" ? "libra(s)" : "paquete(s)";
-                                return `${qty} ${unit} × $${getUnitCost().toFixed(2)}`;
-                              })()}
+                              {packages.length} tipo(s) de paquete · {getTotalPackageCount()} {tenantSettings.shipping_mode === "pounds" ? "libra(s)" : "paquete(s)"} total
                             </p>
                             <p className="text-sm font-semibold">Total envío:</p>
                           </div>

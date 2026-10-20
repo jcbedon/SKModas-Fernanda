@@ -447,6 +447,7 @@ class Shipment(BaseModel):
     shipping_mode: str = "packages"  # "packages" | "pounds" — snapshot at creation time
     weight_pounds: float = 0  # DEPRECATED (kept for backward compatibility with existing data)
     package_count: float = 0  # Units (packages or pounds depending on shipping_mode)
+    packages: Optional[List[dict]] = None  # Array of packages [{shipping_category, unit_cost, package_count, cost}]
     address: str = ""
     country: str = ""  # Optional
     phone: str = ""    # Optional
@@ -687,6 +688,7 @@ class ShipmentCreate(BaseModel):
     shipping_cost: Optional[float] = None  # Calculated on backend from unit_cost * package_count, client may send it too
     weight_pounds: float = 0  # DEPRECATED
     package_count: float = 1  # Units (packages or pounds depending on tenant.shipping_mode)
+    packages: Optional[List[dict]] = None  # Array of packages [{shipping_category, unit_cost, package_count, cost}]
     address: Optional[str] = ""
     country: Optional[str] = ""
     phone: Optional[str] = ""
@@ -6265,6 +6267,14 @@ async def create_shipment(shipment_data: ShipmentCreate, current_user: dict = De
         creator = await db.employees.find_one({"id": current_user["user_id"]}, {"_id": 0, "name": 1})
     creator_name = (creator or {}).get("name") or "Sistema"
 
+    # Handle multiple packages if provided
+    packages_data = None
+    if shipment_data.packages and len(shipment_data.packages) > 0:
+        packages_data = shipment_data.packages
+        # Recalculate totals from packages array
+        total_cost = sum(p.get("cost", 0) for p in packages_data)
+        package_count = sum(p.get("package_count", 0) for p in packages_data)
+
     shipment = Shipment(
         tenant_id=tid,
         user_id=shipment_data.user_id,
@@ -6272,9 +6282,10 @@ async def create_shipment(shipment_data: ShipmentCreate, current_user: dict = De
         purchase_ids=shipment_data.purchase_ids,
         shipping_category=category_key,
         shipping_unit_cost=round(unit_cost, 2),
-        shipping_cost=total_cost,
+        shipping_cost=round(total_cost, 2),
         shipping_mode=shipping_mode,
         package_count=package_count,
+        packages=packages_data,
         address=shipment_data.address, country=shipment_data.country, phone=shipment_data.phone,
         additional_info=shipment_data.additional_info, invoice_id=shipment_data.invoice_id,
         created_by=current_user["user_id"],
