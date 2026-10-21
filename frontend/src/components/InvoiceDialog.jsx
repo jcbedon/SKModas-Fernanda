@@ -1400,14 +1400,10 @@ export default function InvoiceDialog({ open, onOpenChange, client, tenantInfo, 
                 return (
                   <>
                     {/* Artículos / Etiqueta / Peso row */}
-                    <div className="grid grid-cols-3 gap-3 p-3 rounded-xl bg-gray-50 border" data-testid="invoice-summary-stats">
+                    <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-gray-50 border" data-testid="invoice-summary-stats">
                       <div className="text-center">
                         <p className="text-xs text-gray-500 font-semibold">Total de artículos</p>
                         <p className="font-bold text-lg" style={{ color: '#1E3A5F' }}>{totalArticulos}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-gray-500 font-semibold">Total Etiqueta</p>
-                        <p className="font-bold text-lg" style={{ color: '#1E3A5F' }}>${totalEtiqueta.toFixed(2)}</p>
                       </div>
                       <div className="text-center">
                         {(() => {

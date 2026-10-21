@@ -221,7 +221,6 @@ export async function generateInvoicePDF(invoiceData, tenantInfo) {
   // Only page-break before the stats box if it literally won't fit.
   ensureSpace(18);
   const totalArticulos = inv.purchases?.length || 0;
-  const totalEtiqueta = inv.subtotal || 0;
   const shipmentMode = shipment?.shipping_mode;
   const packageCount = shipment?.package_count || 0;
   const weightPounds = shipment?.weight_pounds || 0;
@@ -240,18 +239,16 @@ export async function generateInvoicePDF(invoiceData, tenantInfo) {
 
   doc.setFillColor(241, 245, 249);
   doc.roundedRect(margin, finalY - 2, contentWidth, 14, 2, 2, "F");
-  const statWidth = contentWidth / 3;
+  const statWidth = contentWidth / 2;
   doc.setFontSize(7);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(...colors.textSecondary);
   doc.text("Total de articulos", margin + statWidth * 0.5, finalY + 3, { align: "center" });
-  doc.text("Total Etiqueta", margin + statWidth * 1.5, finalY + 3, { align: "center" });
-  doc.text(thirdStatLabel, margin + statWidth * 2.5, finalY + 3, { align: "center" });
+  doc.text(thirdStatLabel, margin + statWidth * 1.5, finalY + 3, { align: "center" });
   doc.setFontSize(9);
   doc.setTextColor(...colors.textPrimary);
   doc.text(totalArticulos.toString(), margin + statWidth * 0.5, finalY + 9, { align: "center" });
-  doc.text(`$${totalEtiqueta.toFixed(2)}`, margin + statWidth * 1.5, finalY + 9, { align: "center" });
-  doc.text(thirdStatValue, margin + statWidth * 2.5, finalY + 9, { align: "center" });
+  doc.text(thirdStatValue, margin + statWidth * 1.5, finalY + 9, { align: "center" });
 
   finalY += 18;
 
