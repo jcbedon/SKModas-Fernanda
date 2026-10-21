@@ -262,9 +262,7 @@ export async function generateInvoicePDF(invoiceData, tenantInfo) {
   const totalsX = pageWidth - margin - 70;
   const baseSubtotal = inv.subtotal || 0;
   const totalCommission = inv.total_commission || 0;
-  // Display subtotal and commission as SEPARATE lines (matching UI).
-  // `grandTotal` still sums both so the math is unchanged.
-  const displaySubtotal = baseSubtotal;
+  const displaySubtotal = baseSubtotal + totalCommission;
   const taxes = inv.total_tax || 0;
   const shippingCost = shipment?.shipping_cost || 0;
   const saldoPend = inv.saldo_pendiente || 0;
@@ -274,7 +272,7 @@ export async function generateInvoicePDF(invoiceData, tenantInfo) {
   // Late Fee
   const lateFee = inv.late_fee_applied ? (inv.late_fee_amount || 0) : 0;
   const lateFeeDesc = inv.late_fee_description || "Recargo por mora";
-  const grandTotal = displaySubtotal + totalCommission + taxes + shippingCost + saldoPend + lateFee;
+  const grandTotal = displaySubtotal + taxes + shippingCost + saldoPend + lateFee;
   const totalCreditsPreview = depositsApplied + saldoFavorAnterior;
   // IMPORTANT: Always compute `total_a_pagar` and `saldo_a_favor` locally from
   // authoritative components instead of trusting the backend-persisted values.
@@ -294,14 +292,6 @@ export async function generateInvoicePDF(invoiceData, tenantInfo) {
   doc.setTextColor(...colors.textPrimary);
   doc.text(`$${displaySubtotal.toFixed(2)}`, pageWidth - margin, finalY, { align: "right" });
 
-  if (totalCommission > 0) {
-    ensureSpace(7);
-    finalY += 6;
-    doc.setTextColor(...colors.textSecondary);
-    doc.text("Comisiones:", totalsX, finalY);
-    doc.setTextColor(...colors.textPrimary);
-    doc.text(`$${totalCommission.toFixed(2)}`, pageWidth - margin, finalY, { align: "right" });
-  }
   if (taxes > 0) { ensureSpace(7); finalY += 6; doc.setTextColor(...colors.textSecondary); doc.text("Taxes:", totalsX, finalY); doc.setTextColor(...colors.textPrimary); doc.text(`$${taxes.toFixed(2)}`, pageWidth - margin, finalY, { align: "right" }); }
   if (shippingCost > 0) {
     ensureSpace(7);

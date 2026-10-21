@@ -437,3 +437,4 @@ Nuevo permiso `hide_financial_values` que permite crear empleados con acceso com
 ## 2026-10-21
 - Acceso "Facturas sin Envío" con contador: dentro de la tarjeta Envíos del Dashboard (Acciones Rápidas) y junto a "Nuevo" en /admin/shipments. Ambos navegan a /admin/pending-shipments. Probado en preview (sin deploy).
 - GET /api/shipments ya no falla con envíos sin user_id (datos de prueba antiguos en preview).
+- Facturas (diálogo admin, diálogo pendientes y PDF): eliminada la línea "Comisiones"; la comisión se suma dentro de Subtotal. Total sin cambios. Total Etiqueta sigue mostrando solo precio.
