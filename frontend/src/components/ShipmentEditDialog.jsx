@@ -227,7 +227,7 @@ export default function ShipmentEditDialog({
               readOnly={multi}
               data-testid="edit-shipment-total-cost"
             />
-            <p className="text-[10px] text-slate-400 mt-0.5">Se recalcula automáticamente al cambiar categoría o cantidad. Puedes ajustarlo manualmente.</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">{multi ? "Suma de todos los paquetes según su categoría." : "Se recalcula automáticamente al cambiar categoría o cantidad. Puedes ajustarlo manualmente."}</p>
           </div>
 
           {/* Type (legacy) */}
@@ -321,7 +321,7 @@ export default function ShipmentEditDialog({
                 className="w-full h-10 rounded-lg border-dashed"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Agregar Paquete
+                Agregar Tracking
               </Button>
             </div>
           </div>

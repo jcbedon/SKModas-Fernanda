@@ -156,7 +156,7 @@ export default function AdminShipments() {
         // Use current week as default for diagnostics
         const key = getCurrentWeekKey();
         const [y, m, d] = key.split("-").map(Number);
-        const start = new Date(y, m - 1, d, 12, 0, 0, 0);
+        const start = new Date(y, m - 1, d, 0, 0, 0, 0);
         const end = new Date(start);
         end.setDate(end.getDate() + 7);
         end.setSeconds(end.getSeconds() - 1);
@@ -164,7 +164,7 @@ export default function AdminShipments() {
         endISO = end.toISOString();
       } else {
         const [y, m, d] = weekFilter.split("-").map(Number);
-        const start = new Date(y, m - 1, d, 12, 0, 0, 0);
+        const start = new Date(y, m - 1, d, 0, 0, 0, 0);
         const end = new Date(start);
         end.setDate(end.getDate() + 7);
         end.setSeconds(end.getSeconds() - 1);
@@ -800,22 +800,6 @@ export default function AdminShipments() {
   };
 
   const filterByStatus = (status) => {
-    // Week = Monday 12:00 local → next Monday 11:59:59 local (cutoff Monday at noon).
-    const getWeekKey = (dateStr) => {
-      const d = new Date(dateStr);
-      const day = d.getDay(); // 0 Sun .. 6 Sat (Monday = 1)
-      // Days back to the most recent Monday (could be today)
-      const daysSinceMonday = (day - 1 + 7) % 7;
-      const candidate = new Date(d);
-      candidate.setDate(d.getDate() - daysSinceMonday);
-      candidate.setHours(12, 0, 0, 0);
-      // If the candidate is in the future relative to d (i.e., today is Monday before noon),
-      // step back 7 days so the date belongs to the previous week.
-      if (candidate > d) {
-        candidate.setDate(candidate.getDate() - 7);
-      }
-      return candidate.toISOString().slice(0, 10);
-    };
     let filtered = shipments;
     if (weekFilter !== "all") {
       filtered = filtered.filter(s => getWeekKey(s.created_at) === weekFilter);
@@ -1377,40 +1361,6 @@ export default function AdminShipments() {
       <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Week Filter */}
         {(() => {
-          // Week = Monday 12:00 local → next Monday 11:59:59 local (cutoff Monday at noon).
-          const getWeekKey = (dateStr) => {
-            const d = new Date(dateStr);
-            const day = d.getDay();
-            const daysSinceMonday = (day - 1 + 7) % 7;
-            const candidate = new Date(d);
-            candidate.setDate(d.getDate() - daysSinceMonday);
-            candidate.setHours(12, 0, 0, 0);
-            if (candidate > d) {
-              candidate.setDate(candidate.getDate() - 7);
-            }
-            return candidate.toISOString().slice(0, 10);
-          };
-          const getWeekLabel = (dateStr) => {
-            const d = new Date(dateStr);
-            const day = d.getDay();
-            const daysSinceMonday = (day - 1 + 7) % 7;
-            const startMonday = new Date(d);
-            startMonday.setDate(d.getDate() - daysSinceMonday);
-            startMonday.setHours(12, 0, 0, 0);
-            if (startMonday > d) {
-              startMonday.setDate(startMonday.getDate() - 7);
-            }
-            const endMonday = new Date(startMonday);
-            endMonday.setDate(startMonday.getDate() + 7);
-            const fmt = (dt) => {
-              const day = dt.getDate();
-              const monthRaw = dt.toLocaleDateString('es-ES', { month: 'long' });
-              const month = monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1);
-              return `${day}-${month}`;
-            };
-            return `Lunes ${fmt(startMonday)} - Lunes ${fmt(endMonday)}`;
-          };
-
           const weeks = {};
           shipments.forEach(s => {
             const key = getWeekKey(s.created_at);

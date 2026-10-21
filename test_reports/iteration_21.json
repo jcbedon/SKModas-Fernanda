@@ -1,0 +1,39 @@
+{
+  "summary": "UI test of multi-category shipment pricing (Admin > Envíos create/edit, list label, courier widget, invoice Envío line, Packages Report). Verified working: creating G×1 + B×2 makes the form total $136.00, the list card shows 'G×1 · B×2 - $136.00', the invoice shipping_cost is 136. Edit dialog shows one row per package (G 1×$32, B 2×$52), Costo Total 136.00. Changing pkg2 qty to 1 makes it 84.00; after saving, the list and invoice show 84 and the courier widget is $80 (35+45). Legacy single-category edit shows the single selector and recalculates (A×2=84 → qty3=126 → cat B=156). Packages report counts G and B separately for the multi shipment. No console errors. Found 2 bugs: (1) stale `packages` array after a single-category edit, so the courier widget and report are wrong (HIGH); (2) the default week filter on /admin/shipments never matches the week options, so the list looks empty on load (HIGH, existed before this fix).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/shipments/{id} (server.py ~6816-6835)", "issue": "Every shipment created with the new form stores packages=[{cat,qty,cost}], even with only 1 package. The edit dialog opens single-package shipments in legacy mode (handleOpenEditDialog uses packages only when length>1). That mode sends shipping_category/package_count/shipping_cost but no packages, so the backend updates the top-level fields and leaves the old packages array as it was. Repro: create a shipment with A×2 ($84). Edit it to B×3: the list and invoice show $156, but DB packages is still [{A,2,84}]. getShipmentParts() prefers packages, so the courier widget, the Packages Report and the courier PDF all use A×2/$84. Seen: widget was $150 instead of $215, and the report showed A 2 paq $84 instead of B 3 paq $156 (report total $168 vs list $240).", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdminShipments week filter", "issue": "On load the list is always empty ('No hay envíos', widget $0.00) and the week Select shows blank. The initial weekFilter comes from getCurrentWeekKey() (line ~90), which uses Thursday-based keys (e.g. 2026-10-15). The options and filtering at lines ~804 and ~1381 use Monday-noon keys (e.g. 2026-10-19), so the two never match. The user has to pick a week by hand. This existed before this fix (week-cutoff change), but it blocks seeing the shipment just created.", "selector": "[data-testid='week-filter']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Edit a single-package (new-format) shipment, then view courier widget / Packages Report / PDF", "issue": "These views use the stale packages array (see backend issue), so they disagree with the list card and the invoice.", "affected_selectors": ["[data-testid='courier-payment-widget']", "[data-testid^='cat-row-']", "[data-testid='kpi-total-cost']"]}
+    ],
+    "design_issues": [
+      {"screen": "Editar Envío (multi)", "issues": ["Two 'Agregar Paquete' buttons: one adds a category row (edit-add-package), the other adds a tracking field. This is confusing; rename the tracking one to 'Agregar Tracking'.", "The helper text under Costo Total says 'Puedes ajustarlo manualmente', but the field is readOnly in multi mode."]},
+      {"screen": "Packages Report", "issues": ["The category rows show just the key ('G', 'A', 'B') as the label, not the tenant label."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/seed_multi_pkg_ui.py"],
+  "action_items": [
+    "Fix the stale packages array. Either (a) in update_shipment, when no data.packages is sent but shipping_category/package_count/shipping_cost changes, rebuild packages as one entry [{category, qty, unit, cost}] (or unset it); or (b) in handleOpenEditDialog, use the multi rows whenever packages.length >= 1 (not >1). Option (a) is safer. Also consider getShipmentParts falling back to top-level fields when packages.length === 1.",
+    "Make the AdminShipments default week filter use the same Monday-noon getWeekKey as the options and filtering (lines ~90/105 vs ~804/~1381), so the current week is selected and shows shipments on load."
+  ],
+  "critical_code_review_comments": [
+    "AdminShipments.jsx defines 3 different getWeekKey implementations (Thursday-based at top, Monday-noon at ~804 and ~1381). Extract one shared helper.",
+    "AdminShipments.jsx is about 2100 lines; split it up (create dialog, list card, courier widget).",
+    "The ShipmentEditDialog multi-row total is computed in a useEffect keyed on JSON.stringify(packages). It works, but useMemo plus a derived value would avoid extra renders."
+  ],
+  "updated_files": ["/app/backend/tests/seed_multi_pkg_ui.py (new test helper: seed/show/cleanup of TEST-UI-* invoices for M5358)"],
+  "success_rate": {"backend": "n/a (not requested)", "frontend": "80% (requested flows 1-5 pass; 2 issues found outside the exact requested steps)"},
+  "seed_data_creation": "Created invoices TEST-UI-MULTI and TEST-UI-LEGACY for client M5358 via DB, plus 2 UI-created shipments. All removed with `python /app/backend/tests/seed_multi_pkg_ui.py cleanup`.",
+  "test_credentials": "test@preview.com / test123 (identifier field). Login page has 2 hidden duplicate inputs; use ':visible'.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use seed_multi_pkg_ui.py seed, then create shipments in the UI. On /admin/shipments you must pick the week option manually (week-filter) until the default-week bug is fixed. Retest: create a single A×2 shipment, edit it to B×3, then check that the courier widget (B courier rate 45×3) and the Packages Report show B 3 / $156.",
+  "rca of the issue": "Stale packages: the create endpoint always stores packages, even for 1 package. The edit UI treats length<=1 as legacy and sends no packages. The PUT handler only rewrites packages when data.packages is provided, and getShipmentParts trusts packages whenever length>0. Week filter: commit f6f988f changed the week cutoff, but the initial-state getCurrentWeekKey stayed Thursday-based."
+}

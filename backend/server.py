@@ -6819,6 +6819,9 @@ async def update_shipment(shipment_id: str, data: ShipmentUpdate, current_user: 
         updates["shipping_unit_cost"] = data.shipping_unit_cost
     if data.package_count is not None:
         updates["package_count"] = data.package_count
+    if not data.packages and shipment.get("packages") and (data.shipping_category is not None or data.package_count is not None):
+        # Single-category edit replaces any previous package breakdown.
+        updates["packages"] = None
     if data.packages:
         tenant = await db.tenants.find_one({"id": tid}, {"_id": 0, "shipping_categories": 1, "shipping_mode": 1}) or {}
         mode = shipment.get("shipping_mode") or tenant.get("shipping_mode") or "packages"
