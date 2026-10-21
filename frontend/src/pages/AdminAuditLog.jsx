@@ -22,6 +22,7 @@ const ACTION_COLORS = {
   delete_client: "bg-red-100 text-red-700",
   create_purchase: "bg-green-100 text-green-700",
   update_purchase: "bg-yellow-100 text-yellow-700",
+  invoice_totals_updated: "bg-blue-100 text-blue-700",
   delete_purchase: "bg-red-100 text-red-700",
   approve_recharge: "bg-emerald-100 text-emerald-700",
   reject_recharge: "bg-red-100 text-red-700",

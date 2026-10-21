@@ -11,6 +11,7 @@ const actionMeta = {
   reopen_invoice: { color: "bg-amber-100 text-amber-800 border-amber-200", icon: RefreshCw, label: "Factura reabierta" },
   invoice_annulled: { color: "bg-rose-100 text-rose-800 border-rose-200", icon: XCircle, label: "Factura anulada" },
   annul_invoice: { color: "bg-rose-100 text-rose-800 border-rose-200", icon: XCircle, label: "Factura anulada" },
+  invoice_totals_updated: { color: "bg-blue-100 text-blue-800 border-blue-200", icon: RefreshCw, label: "Total actualizado" },
   update_invoice: { color: "bg-slate-100 text-slate-800 border-slate-200", icon: Edit, label: "Factura editada" },
   create_purchase: { color: "bg-blue-50 text-blue-700 border-blue-100", icon: ShoppingBag, label: "Compra creada" },
   update_purchase: { color: "bg-amber-50 text-amber-700 border-amber-100", icon: Edit, label: "Compra editada" },

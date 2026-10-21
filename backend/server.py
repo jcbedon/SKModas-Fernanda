@@ -931,6 +931,38 @@ async def get_actor_name(user_id: str) -> str:
         actor = await db.employees.find_one({"id": user_id}, {"_id": 0, "name": 1})
     return (actor or {}).get("name") or "Sistema"
 
+async def resync_invoice_totals(tid: str, invoice_id: str, current_user: dict, reason: str, item: dict = None, purchase_id: str = None) -> bool:
+    """Recompute invoice header totals from its current items (any non-annulled status) and audit the change."""
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tid, "is_annulled": {"$ne": True}}, {"_id": 0})
+    if not invoice:
+        return False
+    ids = invoice.get("purchase_ids") or []
+    if purchase_id and purchase_id not in ids:
+        return False
+    items = await db.purchases.find({"id": {"$in": ids}, "tenant_id": tid}, {"_id": 0}).to_list(len(ids)) if ids else []
+    if not items:
+        return False
+    after = {
+        "subtotal": round(sum(float(p.get("price") or 0) for p in items), 2),
+        "total_tax": round(sum(float(p.get("tax") or 0) for p in items), 2),
+        "total_commission": round(sum(float(p.get("commission") or 0) for p in items), 2),
+        "total": round(sum(float(p.get("total") or 0) for p in items), 2),
+    }
+    before = {k: round(float(invoice.get(k) or 0), 2) for k in after}
+    if all(abs(before[k] - after[k]) < 0.005 for k in after):
+        return False
+    await db.invoices.update_one({"id": invoice_id, "tenant_id": tid}, {"$set": after})
+    actor_name = await get_actor_name(current_user["user_id"])
+    await log_audit_action(
+        tenant_id=tid, user_id=current_user["user_id"], user_name=actor_name,
+        user_role=current_user.get("role", "admin"), action="invoice_totals_updated",
+        entity_type="invoice", entity_id=invoice_id,
+        entity_name=f"{invoice.get('invoice_number', '')} ({invoice.get('customer_id', '')})",
+        details={"reason": reason, "invoice_status": invoice.get("status"), "customer_id": invoice.get("customer_id"),
+                 "before": before, "after": after, "difference": round(after["total"] - before["total"], 2), "item": item},
+    )
+    return True
+
 async def check_employee_permission(user_id: str, permission: str) -> bool:
     """Check if an employee has a specific permission"""
     employee = await db.employees.find_one({"id": user_id}, {"_id": 0})
@@ -5341,6 +5373,17 @@ async def remove_all_taxes_from_live(live_id: str, current_user: dict = Depends(
         )
         updated_count += 1
     
+    # Sync any invoices that contain these items, then rebalance each client.
+    invoice_ids = {p.get("invoice_id") for p in purchases if p.get("invoice_id")}
+    customers = set()
+    for iid in invoice_ids:
+        if await resync_invoice_totals(tid, iid, current_user, f"Taxes removidos del Live {live.get('title', '')}"):
+            inv = await db.invoices.find_one({"id": iid, "tenant_id": tid}, {"_id": 0, "customer_id": 1})
+            if inv and inv.get("customer_id"):
+                customers.add(inv["customer_id"])
+    for cid in customers:
+        await recalculate_client_invoices(tid, cid)
+
     # Update the Live totals
     await db.lives.update_one(
         {"id": live_id, "tenant_id": tid},
@@ -5960,31 +6003,13 @@ async def update_purchase(purchase_id: str, data: PurchaseUpdate, current_user: 
     if updates:
         await db.purchases.update_one({"id": purchase_id, "tenant_id": tid}, {"$set": updates})
 
-    # If this purchase belongs to a pending, non-annulled invoice, recompute invoice totals
-    linked_invoice_id = purchase.get("invoice_id")
-    if linked_invoice_id:
-        linked_invoice = await db.invoices.find_one(
-            {"id": linked_invoice_id, "tenant_id": tid, "is_annulled": {"$ne": True}},
-            {"_id": 0, "status": 1, "purchase_ids": 1}
-        )
-        if linked_invoice and linked_invoice.get("status") == "pending":
-            inv_purchases = await db.purchases.find(
-                {"id": {"$in": linked_invoice.get("purchase_ids", [])}, "tenant_id": tid},
-                {"_id": 0}
-            ).to_list(len(linked_invoice.get("purchase_ids", [])))
-            new_subtotal = round(sum(p["price"] for p in inv_purchases), 2)
-            new_total_tax = round(sum(p.get("tax", 0) for p in inv_purchases), 2)
-            new_total_commission = round(sum(p.get("commission", 0) for p in inv_purchases), 2)
-            new_total = round(sum(p["total"] for p in inv_purchases), 2)
-            await db.invoices.update_one(
-                {"id": linked_invoice_id, "tenant_id": tid},
-                {"$set": {
-                    "subtotal": new_subtotal,
-                    "total_tax": new_total_tax,
-                    "total_commission": new_total_commission,
-                    "total": new_total
-                }}
-            )
+    # Keep the linked invoice header in sync with its items, whatever its status.
+    if (price_changed or tax_changed or commission_changed) and purchase.get("invoice_id"):
+        await resync_invoice_totals(tid, purchase["invoice_id"], current_user, "Artículo editado", {
+            "purchase_id": purchase_id, "item_name": purchase.get("item_name"),
+            "old": {"price": purchase.get("price"), "commission": purchase.get("commission", 0), "tax": purchase.get("tax", 0), "total": purchase.get("total")},
+            "new": {k: updates.get(k) for k in ("price", "commission", "tax", "total")},
+        }, purchase_id=purchase_id)
 
     updated = await db.purchases.find_one({"id": purchase_id, "tenant_id": tid}, {"_id": 0})
 
@@ -10091,6 +10116,7 @@ async def get_audit_actions(current_user: dict = Depends(get_current_user)):
         {"value": "delete_client", "label": "Eliminar cliente"},
         {"value": "create_purchase", "label": "Crear compra"},
         {"value": "update_purchase", "label": "Editar compra"},
+        {"value": "invoice_totals_updated", "label": "Total de factura actualizado"},
         {"value": "delete_purchase", "label": "Eliminar compra"},
         {"value": "approve_recharge", "label": "Aprobar recarga"},
         {"value": "reject_recharge", "label": "Rechazar recarga"},
