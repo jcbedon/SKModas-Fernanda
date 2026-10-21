@@ -8594,7 +8594,14 @@ async def get_reports_summary(
         {"$match": purchase_match},
         {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$commission", 0]}}}}
     ]).to_list(1)
-    total_commissions = total_commissions_agg if total_commissions_agg else []
+    product_commissions = total_commissions_agg[0]["total"] if total_commissions_agg else 0
+    # Manual commissions entered per Live (Live Shopping), attributed by Live creation date.
+    manual_agg = await db.lives.aggregate([
+        {"$match": {"tenant_id": tid, **date_filter}},
+        {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$manual_commission", 0]}}}}
+    ]).to_list(1)
+    manual_commissions = manual_agg[0]["total"] if manual_agg else 0
+    total_commissions = [{"total": product_commissions + manual_commissions}]
     
     # Shopper taxes = sum of `shopper_tax` per purchase in the period.
     # These are taxes PAID BY THE PERSONAL SHOPPER that reduce their net profit.
@@ -8675,7 +8682,9 @@ async def get_reports_summary(
         customer["name"] = user["name"] if user else "Sin nombre"
     return {
         "total_sales": total_sales[0]["total"] if total_sales else 0,
-        "total_commissions": total_commissions[0]["total"] if total_commissions else 0,
+        "total_commissions": round(total_commissions[0]["total"], 2),
+        "product_commissions": round(product_commissions, 2),
+        "manual_commissions": round(manual_commissions, 2),
         "total_shopper_taxes": round(total_shopper_taxes, 2),
         "client_count": client_count, "live_count": live_count,
         "pending_shipments": pending_shipments,
@@ -8860,6 +8869,7 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
             "total_commissions": 1,
             "total_taxes_paid": 1,
             "store_invoice_tax": 1,
+            "manual_commission": 1,
             "purchase_count": 1,
             "status": 1,
             "created_at": 1
@@ -8921,6 +8931,11 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
         {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$store_invoice_tax", 0]}}}}
     ]).to_list(1)
     store_invoice_taxes = store_invoice_taxes_agg[0]["total"] if store_invoice_taxes_agg else 0
+    manual_comm_agg = await db.lives.aggregate([
+        {"$match": live_tax_match},
+        {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$manual_commission", 0]}}}}
+    ]).to_list(1)
+    manual_commissions = manual_comm_agg[0]["total"] if manual_comm_agg else 0
     
     revenue = revenue_stats[0] if revenue_stats else {"total_price": 0, "total_tax": 0, "total_commission": 0, "total_shopper_tax": 0, "total_revenue": 0, "purchase_count": 0}
     shipping = shipping_stats[0] if shipping_stats else {"total_shipping": 0, "total_weight": 0, "shipment_count": 0}
@@ -8930,7 +8945,7 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
     # Calculate profit (commissions - store invoice taxes = net profit for the business)
     # Note: shopper_taxes (per product) is charged to the CLIENT, not the shopper
     # Only store_invoice_taxes are paid by the shopper and reduce their profit
-    gross_profit = revenue["total_commission"]
+    gross_profit = revenue["total_commission"] + manual_commissions
     # Net profit = commissions - store invoice taxes (taxes shopper paid at the store)
     net_profit = gross_profit - store_invoice_taxes
     
@@ -8938,7 +8953,9 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
         "revenue": {
             "total_product_sales": round(revenue["total_price"], 2),
             "total_tax_collected": round(revenue["total_tax"], 2),
-            "total_commissions": round(revenue["total_commission"], 2),
+            "total_commissions": round(revenue["total_commission"] + manual_commissions, 2),
+            "product_commissions": round(revenue["total_commission"], 2),
+            "manual_commissions": round(manual_commissions, 2),
             "total_store_invoice_taxes": round(store_invoice_taxes, 2),
             "net_profit": round(net_profit, 2),
             "total_charged_to_clients": round(revenue["total_revenue"], 2),
@@ -8958,7 +8975,7 @@ async def get_business_stats(period: str = "all", current_user: dict = Depends(g
             for s in sales_by_store
         ],
         "sales_by_live": [
-            {"name": l.get("title", "N/A"), "store": l.get("store", "N/A"), "ventas": round(l.get("total_sales", 0), 2), "comisiones": round(l.get("total_commissions", 0), 2), "taxes_pagados": round(l.get("total_taxes_paid", 0), 2), "tax_factura": round(l.get("store_invoice_tax", 0), 2), "compras": l.get("purchase_count", 0), "status": l.get("status", "inactive")}
+            {"name": l.get("title", "N/A"), "store": l.get("store", "N/A"), "ventas": round(l.get("total_sales") or 0, 2), "comisiones": round((l.get("total_commissions") or 0) + (l.get("manual_commission") or 0), 2), "comision_manual": round(l.get("manual_commission") or 0, 2), "taxes_pagados": round(l.get("total_taxes_paid") or 0, 2), "tax_factura": round(l.get("store_invoice_tax") or 0, 2), "compras": l.get("purchase_count") or 0, "status": l.get("status", "inactive")}
             for l in sales_by_live
         ],
         "sales_trend": [
