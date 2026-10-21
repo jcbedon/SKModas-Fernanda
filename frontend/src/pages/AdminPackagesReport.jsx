@@ -16,6 +16,7 @@ import {
 import {
   ArrowLeft, Package, Search, Users, Layers, DollarSign, ClipboardCheck, CheckCircle2, AlertCircle, FileText, FileWarning,
 } from "lucide-react";
+import { getShipmentParts, formatShipmentParts } from "@/lib/shipmentPackages";
 
 // Week boundary helper: Monday 12:00 local → next Monday 11:59:59 local.
 // Returns an ISO date string of the start-Monday at noon, used as a stable bucket key.
@@ -130,7 +131,7 @@ export default function AdminPackagesReport() {
     if (weekFilter !== "all") rows = rows.filter((s) => getWeekKey(s.created_at) === weekFilter);
     const code = customerFilter.trim().toUpperCase();
     if (code) rows = rows.filter((s) => (s.customer_id || "").toUpperCase().includes(code));
-    if (categoryFilter !== "all") rows = rows.filter((s) => (s.shipping_category || "").toUpperCase() === categoryFilter);
+    if (categoryFilter !== "all") rows = rows.filter((s) => getShipmentParts(s).some((p) => p.category === categoryFilter));
     return rows;
   }, [shipments, weekFilter, customerFilter, categoryFilter]);
 
@@ -145,17 +146,18 @@ export default function AdminPackagesReport() {
       const custId = (s.customer_id || "—").toUpperCase();
       // Prefer the shipment's own field; fallback to the live client lookup.
       const custName = s.customer_name || clientsByCode[custId] || "";
-      const catKey = (s.shipping_category || "OTHER").toUpperCase();
+      if (!byCustomer[custId]) byCustomer[custId] = { customer_id: custId, name: custName, total_qty: 0, total_cost: 0, by_cat: {} };
+      // Update the name if we just got a non-empty one and previously stored an empty one.
+      if (custName && !byCustomer[custId].name) byCustomer[custId].name = custName;
+      getShipmentParts(s).filter((part) => categoryFilter === "all" || part.category === categoryFilter).forEach((part) => {
+      const catKey = part.category || "OTHER";
       const cat = categories.find((c) => c.key === catKey);
-      const qty = Number(s.package_count) || 0;
-      const cost = Number(s.shipping_cost) || 0;
+      const qty = part.qty;
+      const cost = part.cost;
       grandQty += qty;
       grandCost += cost;
 
       // by customer
-      if (!byCustomer[custId]) byCustomer[custId] = { customer_id: custId, name: custName, total_qty: 0, total_cost: 0, by_cat: {} };
-      // Update the name if we just got a non-empty one and previously stored an empty one.
-      if (custName && !byCustomer[custId].name) byCustomer[custId].name = custName;
       byCustomer[custId].total_qty += qty;
       byCustomer[custId].total_cost += cost;
       if (!byCustomer[custId].by_cat[catKey]) byCustomer[custId].by_cat[catKey] = { qty: 0, cost: 0, label: cat?.label || catKey };
@@ -171,6 +173,7 @@ export default function AdminPackagesReport() {
       prev.qty += qty;
       if (custName && !prev.name) prev.name = custName;
       byCategory[catKey].customers.set(custId, prev);
+      });
     });
 
     return {
@@ -185,7 +188,7 @@ export default function AdminPackagesReport() {
           .sort((a, b) => b.qty - a.qty || a.customer_id.localeCompare(b.customer_id)),
       })).sort((a, b) => b.qty - a.qty),
     };
-  }, [filtered, categories, clientsByCode]);
+  }, [filtered, categories, clientsByCode, categoryFilter]);
 
   const isPounds = shippingMode === "pounds";
   const unitLabel = isPounds ? "lb" : "paq.";
@@ -266,7 +269,7 @@ export default function AdminPackagesReport() {
         created_by_legacy: !!s.created_by_legacy,
         package_count: pkgs,
         shipping_mode: s.shipping_mode,
-        shipping_category: s.shipping_category || "",
+        shipping_category: s.packages?.length > 1 ? formatShipmentParts(s) : (s.shipping_category || ""),
         tracking_count: allTracks.length,
         has_guide: verified,
         guide_verified: verified,

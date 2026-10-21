@@ -22,6 +22,7 @@ import {
   getInvoicesWithoutShipment,
 } from "@/lib/api";
 import { generateCourierManifestPDF } from "@/lib/courierManifestPDF";
+import { getShipmentParts, formatShipmentParts } from "@/lib/shipmentPackages";
 import { toast } from "sonner";
 import { useRefreshOnTabFocus } from "@/hooks/useRefreshOnTabFocus";
 import { Button } from "@/components/ui/button";
@@ -718,6 +719,9 @@ export default function AdminShipments() {
       shipping_unit_cost: shipment.shipping_unit_cost?.toString() || "",
       shipping_category: shipment.shipping_category || "",
       package_count: (shipment.package_count ?? "").toString(),
+      packages: shipment.packages?.length > 1
+        ? shipment.packages.map((p, i) => ({ id: i + 1, shipping_category: p.shipping_category || "", custom_unit_cost: p.shipping_category === "OTHER" ? String(p.unit_cost ?? "") : "", package_count: String(p.package_count ?? 1) }))
+        : null,
       weight_pounds: shipment.weight_pounds?.toString() || "",
       address: shipment.address || "",
       country: shipment.country || "",
@@ -746,6 +750,13 @@ export default function AdminShipments() {
         tracking_numbers: editForm.tracking_numbers?.filter((t) => t.trim()) || [],
         tracking_number: editForm.tracking_numbers?.[0] || null,
       };
+      if (editForm.packages?.length) {
+        data.packages = editForm.packages.map((p) => ({
+          shipping_category: p.shipping_category,
+          package_count: parseFloat(p.package_count) || 0,
+          unit_cost: p.shipping_category === "OTHER" ? (parseFloat(p.custom_unit_cost) || 0) : undefined,
+        }));
+      }
       await updateShipment(shipmentId, data);
       toast.success("Envío actualizado");
       setEditDialogOpen(null);
@@ -1438,13 +1449,13 @@ export default function AdminShipments() {
             if (s.marked_sent || s.status === "in_transit" || s.status === "delivered") {
               sentCount += 1;
             }
-            const cat = catMap[String(s.shipping_category || "").toUpperCase()];
             const mode = s.shipping_mode || tenantShippingMode || "packages";
-            const qty = mode === "pounds" ? Number(s.weight_pounds || 0) : Number(s.package_count || 0);
-            const rate = cat
-              ? (mode === "pounds" ? Number(cat.courier_cost_pounds || 0) : Number(cat.courier_cost_packages || 0))
-              : 0;
-            const computed = qty * rate;
+            const legacyQty = mode === "pounds" ? Number(s.weight_pounds || 0) : Number(s.package_count || 0);
+            const computed = getShipmentParts(s, legacyQty).reduce((acc, part) => {
+              const cat = catMap[part.category];
+              const rate = cat ? (mode === "pounds" ? Number(cat.courier_cost_pounds || 0) : Number(cat.courier_cost_packages || 0)) : 0;
+              return acc + part.qty * rate;
+            }, 0);
             if (computed > 0) {
               courierPaymentTotal += computed;
             } else {
@@ -1765,6 +1776,7 @@ export default function AdminShipments() {
                               </div>
                               <p className="text-sm text-gray-500">
                                 {(() => {
+                                  if (shipment.packages?.length > 1) return formatShipmentParts(shipment);
                                   const categories = tenantSettings.shipping_categories || [];
                                   const cat = categories.find(c => c.key === shipment.shipping_category);
                                   if (cat) return cat.label;
@@ -2005,7 +2017,7 @@ export default function AdminShipments() {
                           <div className="flex items-center gap-2 min-w-0">
                             <Badge variant="outline" className="font-mono text-[10px]">{s.customer_id}</Badge>
                             <span className="font-bold text-slate-800 truncate">{s.client_name}</span>
-                            <span className="text-slate-500">· {s.package_count} {s.shipping_category}</span>
+                            <span className="text-slate-500">· {formatShipmentParts(s)}</span>
                           </div>
                           <span className="text-[10px] font-mono text-slate-500 flex-shrink-0">{s.id.slice(0, 8)}…</span>
                         </div>

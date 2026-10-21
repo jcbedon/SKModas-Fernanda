@@ -1751,6 +1751,30 @@ def _normalize_shipping_categories(raw):
     return out
 
 
+def _price_shipment_packages(packages: list, categories: list, mode: str) -> list:
+    """Price each package with its own category's tenant price (OTHER keeps its custom unit cost)."""
+    price_field = "value_pounds" if mode == "pounds" else "value_packages"
+    priced = []
+    for p in packages or []:
+        key = str(p.get("shipping_category") or "").upper()
+        try:
+            qty = float(p.get("package_count") or 0)
+        except (TypeError, ValueError):
+            qty = 0
+        if mode != "pounds":
+            qty = int(round(qty))
+        if not key or qty <= 0:
+            continue
+        if key == "OTHER":
+            unit = float(p.get("unit_cost") or 0)
+        else:
+            cat = next((c for c in categories if str(c.get("key", "")).upper() == key), None)
+            if not cat:
+                raise HTTPException(status_code=400, detail=f"Categoría de envío {key} no encontrada")
+            unit = float(cat.get(price_field, cat.get("value", 0)) or 0)
+        priced.append({"shipping_category": key, "unit_cost": round(unit, 2), "package_count": qty, "cost": round(unit * qty, 2)})
+    return priced
+
 def _ensure_category_dual_prices(categories):
     """Ensure every category has dual prices (packages/pounds) for both
     the client-facing price and the courier-side cost we pay.
@@ -6295,10 +6319,13 @@ async def create_shipment(shipment_data: ShipmentCreate, current_user: dict = De
     # Handle multiple packages if provided
     packages_data = None
     if shipment_data.packages and len(shipment_data.packages) > 0:
-        packages_data = shipment_data.packages
-        # Recalculate totals from packages array
-        total_cost = sum(p.get("cost", 0) for p in packages_data)
-        package_count = sum(p.get("package_count", 0) for p in packages_data)
+        packages_data = _price_shipment_packages(shipment_data.packages, categories, shipping_mode)
+        if packages_data:
+            total_cost = round(sum(p["cost"] for p in packages_data), 2)
+            package_count = sum(p["package_count"] for p in packages_data)
+            unit_cost = packages_data[0]["unit_cost"]
+        else:
+            packages_data = None
 
     shipment = Shipment(
         tenant_id=tid,
@@ -6755,6 +6782,7 @@ class ShipmentUpdate(BaseModel):
     shipping_unit_cost: Optional[float] = None   # per-package or per-pound cost
     package_count: Optional[float] = None        # qty of packages OR pounds
     tracking_numbers: Optional[List[str]] = None # full array of tracking codes
+    packages: Optional[List[dict]] = None        # multi-category packages; overrides category/qty/cost
 
 @api_router.put("/shipments/{shipment_id}")
 async def update_shipment(shipment_id: str, data: ShipmentUpdate, current_user: dict = Depends(get_current_user)):
@@ -6791,6 +6819,20 @@ async def update_shipment(shipment_id: str, data: ShipmentUpdate, current_user: 
         updates["shipping_unit_cost"] = data.shipping_unit_cost
     if data.package_count is not None:
         updates["package_count"] = data.package_count
+    if data.packages:
+        tenant = await db.tenants.find_one({"id": tid}, {"_id": 0, "shipping_categories": 1, "shipping_mode": 1}) or {}
+        mode = shipment.get("shipping_mode") or tenant.get("shipping_mode") or "packages"
+        priced = _price_shipment_packages(data.packages, _ensure_category_dual_prices(tenant.get("shipping_categories") or []), mode)
+        if not priced:
+            raise HTTPException(status_code=400, detail="Agrega al menos un paquete con categoría y cantidad")
+        data.shipping_cost = round(sum(p["cost"] for p in priced), 2)
+        updates.update({
+            "packages": priced,
+            "shipping_cost": data.shipping_cost,
+            "package_count": sum(p["package_count"] for p in priced),
+            "shipping_category": priced[0]["shipping_category"],
+            "shipping_unit_cost": priced[0]["unit_cost"],
+        })
     if updates:
         updates["updated_at"] = datetime.now(timezone.utc).isoformat()
         await db.shipments.update_one({"id": shipment_id, "tenant_id": tid}, {"$set": updates})
@@ -8619,7 +8661,7 @@ async def get_reports_summary(
     all_shipments = await db.shipments.find(
         shipment_match,
         {"_id": 0, "weight_pounds": 1, "package_count": 1, "shipping_cost": 1,
-         "shipping_category": 1, "shipping_mode": 1, "marked_sent": 1}
+         "shipping_category": 1, "shipping_mode": 1, "marked_sent": 1, "packages": 1}
     ).to_list(20000)
     total_shipping_val = sum((s.get("shipping_cost") or 0) for s in all_shipments)
     total_shipping = [{"total": total_shipping_val}] if all_shipments else []
@@ -8641,18 +8683,17 @@ async def get_reports_summary(
         if not s.get("marked_sent"):
             continue
         sent_count += 1
-        cat_key = str(s.get("shipping_category") or "").upper()
-        cat = cat_map.get(cat_key)
-        if not cat:
-            continue
         s_mode = s.get("shipping_mode") or tenant_doc.get("shipping_mode", "packages")
-        if s_mode == "pounds":
-            qty = float(s.get("weight_pounds", 0) or 0)
-            rate = float(cat.get("courier_cost_pounds", 0) or 0)
+        rate_field = "courier_cost_pounds" if s_mode == "pounds" else "courier_cost_packages"
+        if s.get("packages"):
+            parts = [(str(p.get("shipping_category") or "").upper(), float(p.get("package_count") or 0)) for p in s["packages"]]
         else:
-            qty = float(s.get("package_count", 0) or 0)
-            rate = float(cat.get("courier_cost_packages", 0) or 0)
-        total_courier_payment += qty * rate
+            qty = float((s.get("weight_pounds") if s_mode == "pounds" else s.get("package_count")) or 0)
+            parts = [(str(s.get("shipping_category") or "").upper(), qty)]
+        for cat_key, qty in parts:
+            cat = cat_map.get(cat_key)
+            if cat:
+                total_courier_payment += qty * float(cat.get(rate_field, 0) or 0)
     # Snapshot of current courier prices so the dashboard can display them
     courier_prices_snapshot = [
         {

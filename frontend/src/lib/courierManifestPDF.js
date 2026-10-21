@@ -1,3 +1,4 @@
+import { getShipmentParts } from "@/lib/shipmentPackages";
 // Courier Manifest PDF — Modern layout meant to be handed off to the
 // shipping company. Lists every shipment marked as "Enviado a paquetería"
 // in the active period, broken down by category and totals at the bottom.
@@ -148,21 +149,28 @@ export async function generateCourierManifestPDF({
   let grandQty = 0;
   let grandTotal = 0;
   const enriched = shipments.map((s) => {
-    const cat = catMap[String(s.shipping_category || "").toUpperCase()];
     const mode = s.shipping_mode || tenantMode || "packages";
-    const qty = mode === "pounds" ? Number(s.weight_pounds || 0) : Number(s.package_count || 0);
-    const rate = !cat ? 0 : mode === "pounds" ? Number(cat.courier_cost_pounds || 0) : Number(cat.courier_cost_packages || 0);
-    const computed = qty * rate;
-    // Fallback: if no courier rate configured, use shipping_cost so the
-    // manifest reflects real money movement instead of zeros.
-    const amount = computed > 0 ? computed : Number(s.shipping_cost || 0);
-    const key = String(s.shipping_category || "—").toUpperCase();
-    if (!catTotals[key]) catTotals[key] = { qty: 0, amount: 0, mode };
-    catTotals[key].qty += qty;
-    catTotals[key].amount += amount;
+    const legacyQty = mode === "pounds" ? Number(s.weight_pounds || 0) : Number(s.package_count || 0);
+    const parts = getShipmentParts(s, legacyQty);
+    let qty = 0, amount = 0, computedAll = 0;
+    parts.forEach((part) => {
+      const cat = catMap[part.category];
+      const rate = !cat ? 0 : mode === "pounds" ? Number(cat.courier_cost_pounds || 0) : Number(cat.courier_cost_packages || 0);
+      const computed = part.qty * rate;
+      // Fallback: if no courier rate configured, use the part's shipping cost.
+      const partAmount = computed > 0 ? computed : part.cost;
+      const key = part.category || "—";
+      if (!catTotals[key]) catTotals[key] = { qty: 0, amount: 0, mode };
+      catTotals[key].qty += part.qty;
+      catTotals[key].amount += partAmount;
+      qty += part.qty;
+      amount += partAmount;
+      computedAll += computed;
+    });
     grandQty += qty;
     grandTotal += amount;
-    return { ...s, _qty: qty, _rate: rate, _amount: amount, _mode: mode, _isFallback: computed <= 0 };
+    const rate = qty > 0 ? amount / qty : 0;
+    return { ...s, _qty: qty, _rate: rate, _amount: amount, _mode: mode, _isFallback: computedAll <= 0, _catLabel: parts.map((p) => p.category || "—").join("+") };
   });
 
   // ── Category summary cards ──────────────────────────────────────────
@@ -288,7 +296,7 @@ export async function generateCourierManifestPDF({
       doc.setTextColor(15, 23, 42);
 
       doc.text(String(tracking).slice(0, 22), colX.tracking, y);
-      doc.text(String(s.shipping_category || "—").toUpperCase(), colX.cat, y);
+      doc.text(s._catLabel, colX.cat, y);
       doc.text(qtyLabel, colX.qty, y);
       doc.text(fmtMoney(s._rate), colX.rate, y);
       doc.setFont("helvetica", "bold");

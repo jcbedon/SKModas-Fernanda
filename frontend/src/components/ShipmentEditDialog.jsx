@@ -43,8 +43,30 @@ export default function ShipmentEditDialog({
   // We only auto-update shipping_cost while the dialog is open, so legacy
   // shipments without a category still keep their stored shipping_cost intact
   // until the admin picks a category.
+  const multi = Array.isArray(editForm?.packages) && editForm.packages.length > 0;
+  const partUnit = (pkg) => {
+    if (pkg.shipping_category === "OTHER") return parseFloat(pkg.custom_unit_cost) || 0;
+    const cat = categories.find((c) => c.key === pkg.shipping_category);
+    return cat ? parseFloat(cat[mode === "pounds" ? "value_pounds" : "value_packages"] ?? cat.value ?? 0) || 0 : 0;
+  };
+  const partQty = (pkg) => {
+    const q = parseFloat(pkg.package_count) || 0;
+    return mode === "pounds" ? Math.max(q, 0) : Math.max(Math.round(q), 0);
+  };
+  const updatePart = (id, field, value) =>
+    setEditForm((prev) => ({ ...prev, packages: prev.packages.map((p) => (p.id === id ? { ...p, [field]: value } : p)) }));
+
+  // Multi-package: total is the sum of each package priced by its own category.
+  useEffect(() => {
+    if (!isOpen || !multi) return;
+    const total = editForm.packages.reduce((sum, p) => sum + Math.round(partUnit(p) * partQty(p) * 100) / 100, 0);
+    setEditForm((prev) => ({ ...prev, shipping_cost: total.toFixed(2) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, multi, JSON.stringify(editForm?.packages), mode]);
+
   useEffect(() => {
     if (!isOpen) return;
+    if (multi) return;
     if (!editForm?.shipping_category) return;
     const rawQty = parseFloat(editForm.package_count) || 0;
     const qty = mode === "pounds" ? Math.max(rawQty, 0) : Math.max(Math.round(rawQty), 0);
@@ -73,6 +95,58 @@ export default function ShipmentEditDialog({
           <DialogTitle>Editar Envío</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 pt-4">
+          {multi ? (
+            <div className="space-y-3" data-testid="edit-shipment-packages">
+              {editForm.packages.map((pkg, idx) => (
+                <div key={pkg.id} className="border rounded-xl p-3 space-y-2 bg-slate-50">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-600">Paquete {idx + 1}</span>
+                    {editForm.packages.length > 1 && (
+                      <Button type="button" variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500"
+                        onClick={() => setEditForm((prev) => ({ ...prev, packages: prev.packages.filter((p) => p.id !== pkg.id) }))}
+                        data-testid={`edit-remove-package-${idx}`}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2">
+                      <Select value={pkg.shipping_category || ""} onValueChange={(v) => updatePart(pkg.id, "shipping_category", v)}>
+                        <SelectTrigger className="h-10 rounded-lg" data-testid={`edit-package-category-${idx}`}>
+                          <SelectValue placeholder="Categoría" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categories.map((cat) => (
+                            <SelectItem key={cat.key} value={cat.key}>
+                              {cat.label} — ${mode === "pounds" ? cat.value_pounds : cat.value_packages}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="OTHER">Otra (precio personalizado)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Input type="number" step={mode === "pounds" ? "0.1" : "1"} min="0" value={pkg.package_count}
+                      onChange={(e) => updatePart(pkg.id, "package_count", e.target.value)} onWheel={(e) => e.target.blur()}
+                      className="h-10 rounded-lg" data-testid={`edit-package-qty-${idx}`} />
+                  </div>
+                  {pkg.shipping_category === "OTHER" && (
+                    <Input type="number" step="0.01" value={pkg.custom_unit_cost} placeholder="Costo unitario"
+                      onChange={(e) => updatePart(pkg.id, "custom_unit_cost", e.target.value)} onWheel={(e) => e.target.blur()}
+                      className="h-10 rounded-lg" data-testid={`edit-package-unit-${idx}`} />
+                  )}
+                  <p className="text-xs text-slate-500" data-testid={`edit-package-subtotal-${idx}`}>
+                    {partQty(pkg)} × ${partUnit(pkg).toFixed(2)} = <span className="font-bold text-slate-800">${(partUnit(pkg) * partQty(pkg)).toFixed(2)}</span>
+                  </p>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" className="w-full rounded-lg gap-1"
+                onClick={() => setEditForm((prev) => ({ ...prev, packages: [...prev.packages, { id: Math.max(...prev.packages.map((p) => p.id)) + 1, shipping_category: "", custom_unit_cost: "", package_count: "1" }] }))}
+                data-testid="edit-add-package">
+                <Plus className="h-4 w-4" /> Agregar Paquete
+              </Button>
+            </div>
+          ) : (
+            <>
           {/* Category selector */}
           <div>
             <Label>Categoría de envío</Label>
@@ -137,6 +211,9 @@ export default function ShipmentEditDialog({
             )}
           </div>
 
+            </>
+          )}
+
           {/* Total cost (auto-calculated, manually editable for backwards compat) */}
           <div>
             <Label>Costo Total del Envío (USD)</Label>
@@ -147,6 +224,7 @@ export default function ShipmentEditDialog({
               onChange={(e) => setEditForm({ ...editForm, shipping_cost: e.target.value })}
               onWheel={(e) => e.target.blur()}
               className="h-12 rounded-xl mt-1 font-bold"
+              readOnly={multi}
               data-testid="edit-shipment-total-cost"
             />
             <p className="text-[10px] text-slate-400 mt-0.5">Se recalcula automáticamente al cambiar categoría o cantidad. Puedes ajustarlo manualmente.</p>
