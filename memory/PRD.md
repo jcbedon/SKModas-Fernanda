@@ -433,3 +433,7 @@ Nuevo permiso `hide_financial_values` que permite crear empleados con acceso com
 - Password: 123456
 - Tiene acceso a: clientes, compras, lives, recargas, envíos, facturas, reportes, estadísticas
 - NO ve: ningún valor de dinero (aparece como "••••")
+
+## 2026-10-21
+- Acceso "Facturas sin Envío" con contador: dentro de la tarjeta Envíos del Dashboard (Acciones Rápidas) y junto a "Nuevo" en /admin/shipments. Ambos navegan a /admin/pending-shipments. Probado en preview (sin deploy).
+- GET /api/shipments ya no falla con envíos sin user_id (datos de prueba antiguos en preview).

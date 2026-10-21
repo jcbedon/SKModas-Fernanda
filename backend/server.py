@@ -6648,7 +6648,7 @@ async def get_all_shipments(status: Optional[str] = None, current_user: dict = D
         return []
     
     # Batch fetch all users (clients) in one query instead of N queries
-    user_ids = list(set(s["user_id"] for s in shipments))
+    user_ids = list({s.get("user_id") for s in shipments if s.get("user_id")})
     users_list = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(len(user_ids))
     users_dict = {u["id"]: u["name"] for u in users_list}
 
@@ -6708,7 +6708,7 @@ async def get_all_shipments(status: Optional[str] = None, current_user: dict = D
         inv_meta = invoices_dict.get(s.get("invoice_id") or "", {})
         result.append({
             **s,
-            "user_name": users_dict.get(s["user_id"], "Unknown"),
+            "user_name": users_dict.get(s.get("user_id"), s.get("customer_name") or "Unknown"),
             "created_by_name": creator_name,
             "created_by_legacy": is_legacy,
             "invoice_status": inv_meta.get("status"),

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/App";
 import { useNavigate, Link } from "react-router-dom";
-import { getReportsSummary, getActiveLive, getBuyersReport, getSalesDetail } from "@/lib/api";
+import { getReportsSummary, getActiveLive, getBuyersReport, getSalesDetail, getInvoicesWithoutShipment } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -87,8 +87,11 @@ export default function AdminDashboard() {
   const [buyersFilter, setBuyersFilter] = useState("");
   const [expandedBuyerWeek, setExpandedBuyerWeek] = useState(null);
 
+  const [pendingShipCount, setPendingShipCount] = useState(null);
+
   useEffect(() => {
     loadData();
+    getInvoicesWithoutShipment().then((r) => setPendingShipCount(r.data?.invoices_count ?? 0)).catch(() => {});
   }, []);
 
   // Refresh whenever the user comes back to this tab.
@@ -361,6 +364,18 @@ export default function AdminDashboard() {
                     <div>
                       <p className="font-bold text-slate-800">{item.label}</p>
                       <p className="text-sm text-gray-500">{item.description}</p>
+                      {item.path === "/admin/shipments" && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate("/admin/pending-shipments"); }}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-orange-300 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 hover:bg-orange-100 transition-colors"
+                          data-testid="dashboard-pending-shipments-btn"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          Facturas sin Envío
+                          <span className="rounded-full bg-orange-600 px-1.5 text-white" data-testid="dashboard-pending-shipments-count">{pendingShipCount ?? "…"}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </CardContent>

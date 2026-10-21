@@ -18,7 +18,8 @@ import {
   attachSessionFilesToShipment,
   diagnoseShipments,
   toggleShipmentSent,
-  getShippingCategoriesAdmin
+  getShippingCategoriesAdmin,
+  getInvoicesWithoutShipment,
 } from "@/lib/api";
 import { generateCourierManifestPDF } from "@/lib/courierManifestPDF";
 import { toast } from "sonner";
@@ -193,6 +194,11 @@ export default function AdminShipments() {
     tracking_numbers: []
   });
   
+  const [pendingShipCount, setPendingShipCount] = useState(null);
+  useEffect(() => {
+    getInvoicesWithoutShipment().then((r) => setPendingShipCount(r.data?.invoices_count ?? 0)).catch(() => {});
+  }, []);
+
   // Redirect if no permission
   useEffect(() => {
     if (!hasPermission) {
@@ -1334,6 +1340,17 @@ export default function AdminShipments() {
           so the primary action lives here to stay reachable. */}
       <div className="max-w-4xl mx-auto px-4 pt-4 flex items-center justify-between gap-3">
         <span className="font-bold text-slate-800 text-lg">Envíos</span>
+        <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          className="rounded-xl text-sm gap-2 border-orange-300 text-orange-700 hover:bg-orange-50"
+          onClick={() => navigate("/admin/pending-shipments")}
+          data-testid="pending-shipments-btn"
+        >
+          <FileText className="h-4 w-4" />
+          <span>Facturas sin Envío</span>
+          <span className="rounded-full bg-orange-600 px-1.5 text-xs text-white" data-testid="pending-shipments-count">{pendingShipCount ?? "…"}</span>
+        </Button>
         <Button
           className="font-bold rounded-xl"
           style={{ background: '#1E3A5F', color: 'white' }}
@@ -1343,6 +1360,7 @@ export default function AdminShipments() {
           <Plus className="h-4 w-4 mr-2" />
           Nuevo
         </Button>
+        </div>
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6">
