@@ -7517,6 +7517,23 @@ async def list_annulled_invoices(current_user: dict = Depends(get_current_user))
     return invoices
 
 
+def compute_shipment_late_fee(shipment: dict, tenant: dict):
+    """Late fee = sum over packages of (category late_fee × package count). Pounds mode: one fee per category."""
+    if not shipment:
+        return 0.0, None
+    fees = {str(c.get("key", "")).upper(): float(c.get("late_fee") or 0) for c in tenant.get("shipping_categories") or []}
+    pounds = (shipment.get("shipping_mode") or tenant.get("shipping_mode")) == "pounds"
+    parts = shipment.get("packages") or [{"shipping_category": shipment.get("shipping_category"), "package_count": shipment.get("package_count") or 1}]
+    total, cats = 0.0, []
+    for p in parts:
+        key = str(p.get("shipping_category") or "").upper()
+        qty = 1 if pounds else int(round(float(p.get("package_count") or 0)))
+        if key and qty > 0 and fees.get(key, 0) > 0:
+            total += fees[key] * qty
+            cats.append(f"{key}×{qty}")
+    return round(total, 2), (" · ".join(cats) or None)
+
+
 async def calculate_and_apply_late_fee(invoice: dict, tenant: dict, shipment: dict = None) -> dict:
     """
     Calculate and apply late fee to an invoice based on shipping category.
@@ -7575,25 +7592,10 @@ async def calculate_and_apply_late_fee(invoice: dict, tenant: dict, shipment: di
     except Exception:
         return invoice
     
-    # Get shipping category from shipment
-    shipping_category = None
-    if shipment:
-        shipping_category = shipment.get("shipping_category")
-    
-    if not shipping_category:
-        return invoice  # No shipping category to base fee on
-    
-    # Find the late fee for this category
-    shipping_categories = tenant.get("shipping_categories", [])
-    late_fee_amount = 0
-    for cat in shipping_categories:
-        if cat.get("key") == shipping_category:
-            late_fee_amount = float(cat.get("late_fee", 0))
-            break
-    
+    late_fee_amount, shipping_category = compute_shipment_late_fee(shipment, tenant)
     if late_fee_amount <= 0:
-        return invoice  # No late fee configured for this category
-    
+        return invoice  # No late fee configured for these categories
+
     # Apply the late fee
     now_iso = datetime.now(timezone.utc).isoformat()
     invoice["late_fee_applied"] = True
@@ -7626,19 +7628,17 @@ async def toggle_invoice_late_fee(invoice_id: str, data: LateFeeToggle, current_
         raise HTTPException(status_code=404, detail="Factura no encontrada")
     if invoice.get("is_annulled"):
         raise HTTPException(status_code=400, detail="La factura está anulada")
-    tenant = await db.tenants.find_one({"id": tid}, {"_id": 0, "shipping_categories": 1, "late_fee_description": 1}) or {}
+    tenant = await db.tenants.find_one({"id": tid}, {"_id": 0, "shipping_categories": 1, "late_fee_description": 1, "shipping_mode": 1}) or {}
     before = {"applied": bool(invoice.get("late_fee_applied")), "amount": invoice.get("late_fee_amount") or 0}
     updates = {"late_fee_manual": True}
     if data.enabled:
         amount = data.amount
         category = invoice.get("late_fee_category")
         if amount is None:
-            amount = invoice.get("late_fee_amount") or 0
+            shipment = await db.shipments.find_one({"invoice_id": invoice_id, "tenant_id": tid}, {"_id": 0})
+            amount, category = compute_shipment_late_fee(shipment, tenant)
             if amount <= 0:
-                shipment = await db.shipments.find_one({"invoice_id": invoice_id, "tenant_id": tid}, {"_id": 0, "shipping_category": 1})
-                category = (shipment or {}).get("shipping_category")
-                cat = next((c for c in tenant.get("shipping_categories") or [] if c.get("key") == category), None)
-                amount = float((cat or {}).get("late_fee") or 0)
+                amount = invoice.get("late_fee_amount") or 0
         if amount <= 0:
             raise HTTPException(status_code=400, detail="Ingresa el monto del cobro por retraso")
         updates.update({

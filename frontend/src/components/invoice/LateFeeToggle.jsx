@@ -31,6 +31,7 @@ export const LateFeeToggle = ({ invoice, onChanged }) => {
         <Checkbox className="border-amber-500 data-[state=checked]:bg-amber-600 data-[state=checked]:text-white" checked={applied} disabled={saving || invoice.is_annulled} onCheckedChange={(v) => save(!!v, amount)} data-testid="late-fee-checkbox" />
         <Clock className="h-3 w-3" />
         {invoice.late_fee_description || "Cobro por retraso"}
+        {applied && invoice.late_fee_category && <span className="text-[10px] text-amber-600/80" data-testid="late-fee-breakdown">({invoice.late_fee_category})</span>}
         {saving && <Loader2 className="h-3 w-3 animate-spin" />}
       </label>
       <Input
