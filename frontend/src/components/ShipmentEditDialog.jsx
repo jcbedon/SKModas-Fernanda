@@ -210,6 +210,17 @@ export default function ShipmentEditDialog({
               </p>
             )}
           </div>
+          <Button type="button" variant="outline" size="sm" className="w-full rounded-lg gap-1"
+            onClick={() => setEditForm((prev) => ({
+              ...prev,
+              packages: [
+                { id: 1, shipping_category: prev.shipping_category || "", custom_unit_cost: prev.shipping_category === "OTHER" ? String(prev.shipping_unit_cost || "") : "", package_count: String(prev.package_count || 1) },
+                { id: 2, shipping_category: "", custom_unit_cost: "", package_count: "1" },
+              ],
+            }))}
+            data-testid="edit-add-package-single">
+            <Plus className="h-4 w-4" /> Agregar Paquete de otra categoría
+          </Button>
 
             </>
           )}
