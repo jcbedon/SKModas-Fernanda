@@ -298,3 +298,5 @@ export const getPacaSales = (period = "week") => api.get("/pacas/sales/list", { 
 export const getPacaStats = (period = "week") => api.get("/pacas/stats", { params: { period } });
 
 export default api;
+export const getDuplicateRecharges = () => api.get("/admin/bank-accounts/duplicate-recharges");
+export const fixDuplicateRecharges = () => api.post("/admin/bank-accounts/duplicate-recharges/fix");

@@ -253,7 +253,19 @@ export default function AdminWallet() {
     }
   };
 
+  const approvingRef = useRef(new Set());
   const handleApprove = async (transactionId) => {
+    // Block double clicks: one approval in flight per recharge.
+    if (approvingRef.current.has(transactionId)) return;
+    approvingRef.current.add(transactionId);
+    try {
+      await doApprove(transactionId);
+    } finally {
+      approvingRef.current.delete(transactionId);
+    }
+  };
+
+  const doApprove = async (transactionId) => {
     const tx = pendingDeposits.find(d => d.id === transactionId);
     // If amount missing or zero, require admin to input it (client-submitted recharges)
     if (!tx?.amount || tx.amount <= 0) {

@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 import os
 import logging
 from pathlib import Path
@@ -2081,6 +2082,64 @@ async def get_bank_accounts_summary(current_user: dict = Depends(get_current_use
         "tenant_name": (tenant or {}).get("business_name"),
         "tenant_logo": (tenant or {}).get("logo_url"),
     }
+
+
+async def _find_duplicate_recharge_rows(tid: str):
+    """Active ledger rows that repeat the same client recharge. The earliest row of each group is kept."""
+    groups = await db.bank_transactions.aggregate([
+        {"$match": {"tenant_id": tid, "kind": "recharge", "is_deleted": {"$ne": True},
+                    "source_transaction_id": {"$nin": [None, ""]}}},
+        {"$sort": {"created_at": 1}},
+        {"$group": {"_id": "$source_transaction_id", "rows": {"$push": {
+            "id": "$id", "amount": "$amount", "created_at": "$created_at", "bank_account_id": "$bank_account_id",
+            "customer_id": "$customer_id", "customer_name": "$customer_name", "reference_number": "$reference_number"}},
+            "count": {"$sum": 1}}},
+        {"$match": {"count": {"$gt": 1}}},
+    ]).to_list(None)
+    tenant = await db.tenants.find_one({"id": tid}, {"_id": 0, "bank_accounts": 1}) or {}
+    names = {a.get("id"): f"{a.get('bank_name', '')} · {a.get('owner_name', '')}" for a in tenant.get("bank_accounts", [])}
+    out = []
+    for g in groups:
+        keep, extra = g["rows"][0], g["rows"][1:]
+        out.append({
+            "source_transaction_id": g["_id"], "customer_id": keep.get("customer_id"), "customer_name": keep.get("customer_name"),
+            "reference_number": keep.get("reference_number"), "amount": keep.get("amount"),
+            "account_name": names.get(keep.get("bank_account_id"), keep.get("bank_account_id")),
+            "kept_row_id": keep["id"], "duplicate_row_ids": [r["id"] for r in extra],
+            "extra_amount": round(sum(float(r.get("amount") or 0) for r in extra), 2),
+        })
+    return out
+
+
+@api_router.get("/admin/bank-accounts/duplicate-recharges")
+async def list_duplicate_recharges(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Solo el administrador")
+    dups = await _find_duplicate_recharge_rows(current_user["tenant_id"])
+    return {"duplicates": dups, "total_extra": round(sum(d["extra_amount"] for d in dups), 2)}
+
+
+@api_router.post("/admin/bank-accounts/duplicate-recharges/fix")
+async def fix_duplicate_recharges(current_user: dict = Depends(get_current_user)):
+    """Soft-deletes duplicated recharge rows (kept visible, struck-through), leaving one per recharge."""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Solo el administrador")
+    tid = current_user["tenant_id"]
+    dups = await _find_duplicate_recharge_rows(tid)
+    ids = [i for d in dups for i in d["duplicate_row_ids"]]
+    now = datetime.now(timezone.utc).isoformat()
+    if ids:
+        await db.bank_transactions.update_many(
+            {"tenant_id": tid, "id": {"$in": ids}, "is_deleted": {"$ne": True}},
+            {"$set": {"is_deleted": True, "deleted_at": now, "deleted_by": current_user["user_id"], "deleted_reason": "Duplicado"}})
+    actor_name = await get_actor_name(current_user["user_id"])
+    await log_audit_action(
+        tenant_id=tid, user_id=current_user["user_id"], user_name=actor_name, user_role="admin",
+        action="bank_duplicates_fixed", entity_type="bank_transaction", entity_id="duplicates",
+        entity_name=f"{len(ids)} movimientos duplicados anulados",
+        details={"duplicates": dups},
+    )
+    return {"fixed_rows": len(ids), "groups": len(dups), "total_removed": round(sum(d["extra_amount"] for d in dups), 2)}
 
 
 @api_router.get("/admin/bank-accounts/{account_id}/transactions")
@@ -4488,12 +4547,19 @@ async def approve_deposit(transaction_id: str, current_user: dict = Depends(get_
         raise HTTPException(status_code=400, detail="Transacción ya procesada")
     if not transaction.get("amount") or transaction["amount"] <= 0:
         raise HTTPException(status_code=400, detail="Debes asignar el monto antes de aprobar")
-    wallet = await db.wallets.find_one({"user_id": transaction["user_id"], "tenant_id": tid}, {"_id": 0})
-    new_balance = wallet["available"] + transaction["amount"]
-    await db.wallets.update_one({"user_id": transaction["user_id"], "tenant_id": tid},
-        {"$set": {"available": new_balance, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    # Atomic claim: only one concurrent request can move pending -> approved (prevents double-approval).
+    claim = await db.wallet_transactions.update_one(
+        {"id": transaction_id, "tenant_id": tid, "status": "pending"},
+        {"$set": {"status": "approved", "approved_at": datetime.now(timezone.utc).isoformat()}})
+    if claim.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Transacción ya procesada")
+    wallet = await db.wallets.find_one_and_update(
+        {"user_id": transaction["user_id"], "tenant_id": tid},
+        {"$inc": {"available": transaction["amount"]}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
+        projection={"_id": 0, "available": 1}, return_document=ReturnDocument.AFTER)
+    new_balance = (wallet or {}).get("available", 0)
     await db.wallet_transactions.update_one({"id": transaction_id, "tenant_id": tid},
-        {"$set": {"status": "approved", "balance_after": new_balance, "approved_at": datetime.now(timezone.utc).isoformat()}})
+        {"$set": {"balance_after": new_balance}})
     await create_notification(tid, transaction["user_id"], transaction["customer_id"], "wallet_credited",
         "Saldo Acreditado", f"Se han acreditado ${transaction['amount']:.2f} USD. Saldo actual: ${new_balance:.2f} USD")
     
@@ -4552,17 +4618,12 @@ async def approve_deposit(transaction_id: str, current_user: dict = Depends(get_
                     {"$set": {"bank_account_id": target_id, "bank_account_auto_matched": True}}
                 )
         if target_id:
-            # Replace any previous recharge ledger row tied to this tx (idempotent re-approval).
-            await db.bank_transactions.delete_many({
-                "tenant_id": tid, "source_transaction_id": transaction_id, "kind": "recharge"
-            })
-            # Ledger row uses the SYSTEM approval timestamp (not the screenshot
-            # date) — the admin explicitly requested this so the accounts
-            # module reflects when the money was booked into the system.
+            # One ledger row per recharge: upsert keyed on the source transaction (idempotent).
             ledger_created_at = datetime.now(timezone.utc).isoformat()
-            await db.bank_transactions.insert_one({
-                "id": str(uuid.uuid4()),
-                "tenant_id": tid,
+            await db.bank_transactions.update_one(
+                {"tenant_id": tid, "source_transaction_id": transaction_id, "kind": "recharge"},
+                {"$setOnInsert": {"id": str(uuid.uuid4()), "created_at": ledger_created_at, "approved_at": ledger_created_at},
+                 "$set": {
                 "bank_account_id": target_id,
                 "kind": "recharge",
                 "amount": float(transaction.get("amount", 0) or 0),
@@ -4573,9 +4634,8 @@ async def approve_deposit(transaction_id: str, current_user: dict = Depends(get_
                 "reference_number": transaction.get("reference_number"),
                 "created_by": current_user["user_id"],
                 "created_by_name": user_name,
-                "created_at": ledger_created_at,
-                "approved_at": ledger_created_at,
-            })
+                "is_deleted": False,
+            }}, upsert=True)
     except Exception as _bank_err:
         logger.warning(f"[bank_ledger] failed to attribute recharge {transaction_id}: {_bank_err}")
 
@@ -10299,6 +10359,7 @@ async def get_audit_actions(current_user: dict = Depends(get_current_user)):
         {"value": "update_purchase", "label": "Editar compra"},
         {"value": "invoice_totals_updated", "label": "Total de factura actualizado"},
         {"value": "invoice_late_fee_toggled", "label": "Cobro por retraso"},
+        {"value": "bank_duplicates_fixed", "label": "Duplicados de cuentas corregidos"},
         {"value": "delete_purchase", "label": "Eliminar compra"},
         {"value": "approve_recharge", "label": "Aprobar recarga"},
         {"value": "reject_recharge", "label": "Rechazar recarga"},

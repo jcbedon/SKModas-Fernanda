@@ -42,6 +42,7 @@ import {
   updateBankAccounts,
 } from "@/lib/api";
 import { generateBankStatementPDF } from "@/lib/bankStatementPDF";
+import { DuplicateRecharges } from "@/components/bank/DuplicateRecharges";
 
 const fmtDate = (iso) => {
   if (!iso) return "—";
@@ -64,7 +65,7 @@ const kindMeta = {
 
 export default function AdminBankAccounts() {
   const navigate = useNavigate();
-  const { hideFinancials } = useAuth();
+  const { hideFinancials, user } = useAuth();
   
   // Money formatter that respects hideFinancials permission
   const fmtMoney = (v) => {
@@ -395,6 +396,9 @@ export default function AdminBankAccounts() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+          {user?.role === "admin" && (
+            <DuplicateRecharges onFixed={() => Promise.all([loadSummary(), selected && loadLedger(selected.id)])} />
+          )}
           <Button
             variant="ghost"
             size="sm"
