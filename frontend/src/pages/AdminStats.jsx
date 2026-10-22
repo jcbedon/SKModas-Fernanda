@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import CollectionsReport from "@/components/CollectionsReport";
+import { HandCoins } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, DollarSign, TrendingUp, TrendingDown, Wallet, Store, Radio, BarChart3, PieChart as PieChartIcon, Users, AlertTriangle, Search, Filter, ChevronDown, ChevronUp, Receipt, Image, Clock, Phone, Package } from "lucide-react";
 import { SalesTrendChart, StoreBarChart, ProfitPieChart, LiveBarChart, ClientsDebtsChart, ClientsDebtsPieChart, ClientsByDateChart } from "@/components/StatsCharts";
@@ -374,6 +376,7 @@ export default function AdminStats() {
             { value: "resumen",    perm: "stats_resumen",    label: "Resumen",    Icon: DollarSign,    activeCls: "data-[state=active]:bg-slate-800 data-[state=active]:text-white" },
             { value: "ganancias",  perm: "stats_tiendas",    label: "Tiendas",    Icon: Receipt,       activeCls: "data-[state=active]:bg-green-600 data-[state=active]:text-white" },
             { value: "deudas",     perm: "stats_deudas",     label: "Deudas",     Icon: AlertTriangle, activeCls: "data-[state=active]:bg-red-600 data-[state=active]:text-white" },
+            { value: "cobranza",   perm: "stats_deudas",     label: "Cobranza",   Icon: HandCoins,     activeCls: "data-[state=active]:bg-emerald-600 data-[state=active]:text-white" },
             { value: "inactivos",  perm: "stats_inactivos",  label: "Inactivos",  Icon: Clock,         activeCls: "data-[state=active]:bg-orange-600 data-[state=active]:text-white" },
             { value: "graficas",   perm: "stats_graficas",   label: "Graficas",   Icon: BarChart3,     activeCls: "data-[state=active]:bg-slate-800 data-[state=active]:text-white" },
             { value: "detalle",    perm: "stats_detalle",    label: "Detalle",    Icon: Store,         activeCls: "data-[state=active]:bg-slate-800 data-[state=active]:text-white" },
@@ -919,6 +922,10 @@ export default function AdminStats() {
           </TabsContent>
 
           {/* Inactivos Tab */}
+          <TabsContent value="cobranza" className="mt-6">
+            <CollectionsReport />
+          </TabsContent>
+
           <TabsContent value="inactivos" className="mt-6">
             <div className="space-y-6">
               {/* KPI Cards */}

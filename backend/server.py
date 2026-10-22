@@ -9493,6 +9493,71 @@ async def get_clients_debts_report(current_user: dict = Depends(get_current_user
     }
 
 
+@api_router.get("/admin/reports/collections")
+async def get_collections_report(start: Optional[str] = None, end: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Clients who owe (or owed) on an invoice and have been paying, most recent payment first."""
+    debts = await get_clients_debts_report(current_user)
+    tid = current_user["tenant_id"]
+    by_uid = {c["id"]: c for c in debts["clients"]}
+    invoices = await db.invoices.find(
+        {"tenant_id": tid, "is_annulled": {"$ne": True}},
+        {"_id": 0, "customer_id": 1, "created_at": 1, "total_a_pagar": 1, "applied_deposits": 1}
+    ).to_list(None)
+    deposits = await db.wallet_transactions.find(
+        {"tenant_id": tid, "type": "deposit", "status": "approved", "is_deleted": {"$ne": True}},
+        {"_id": 0, "id": 1, "user_id": 1, "amount": 1, "created_at": 1}
+    ).to_list(None)
+    dep_date = {d["id"]: d.get("created_at") or "" for d in deposits}
+    # Earliest invoice per customer that is still owed or got paid after it was issued.
+    first_owed = {}
+    for inv in invoices:
+        created = inv.get("created_at") or ""
+        owed = (inv.get("total_a_pagar") or 0) > 0.01 or any(
+            dep_date.get(ad.get("deposit_id"), "") > created for ad in (inv.get("applied_deposits") or []))
+        cid = inv.get("customer_id")
+        if owed and cid and (cid not in first_owed or created < first_owed[cid]):
+            first_owed[cid] = created
+    deps_by_uid = {}
+    for d in deposits:
+        deps_by_uid.setdefault(d["user_id"], []).append(d)
+
+    rows = []
+    for uid, client in by_uid.items():
+        since = first_owed.get(client["customer_id"])
+        if since is None:
+            continue
+        paid = sorted((d for d in deps_by_uid.get(uid, []) if (d.get("created_at") or "") >= since),
+                      key=lambda d: d.get("created_at") or "", reverse=True)
+        in_period = [d for d in paid if (not start or d["created_at"] >= start) and (not end or d["created_at"] <= end)]
+        if not in_period:
+            continue
+        remaining = round(max(0.0, client.get("real_debt") or 0), 2)
+        rows.append({
+            "id": uid,
+            "customer_id": client["customer_id"],
+            "name": client["name"],
+            "whatsapp": client.get("whatsapp", ""),
+            "remaining": remaining,
+            "is_paid": remaining <= 0.01,
+            "paid_in_period": round(sum(d.get("amount") or 0 for d in in_period), 2),
+            "payments_count": len(in_period),
+            "last_payment_at": in_period[0]["created_at"],
+            "last_payment_amount": round(in_period[0].get("amount") or 0, 2),
+            "payments": [{"amount": round(d.get("amount") or 0, 2), "created_at": d["created_at"]} for d in in_period[:20]],
+            "last_invoice_number": client.get("last_invoice_number"),
+        })
+    rows.sort(key=lambda r: r["last_payment_at"], reverse=True)
+    return {
+        "clients": rows,
+        "totals": {
+            "clients_count": len(rows),
+            "total_paid": round(sum(r["paid_in_period"] for r in rows), 2),
+            "total_remaining": round(sum(r["remaining"] for r in rows), 2),
+            "paid_off_count": sum(1 for r in rows if r["is_paid"]),
+        },
+    }
+
+
 @api_router.get("/admin/reports/purchases-without-tax")
 async def get_purchases_without_tax(current_user: dict = Depends(get_current_user)):
     """Lists purchases where tax was NOT applied (apply_tax=false or tax=0).
