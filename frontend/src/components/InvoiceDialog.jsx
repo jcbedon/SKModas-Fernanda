@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { LateFeeToggle } from "@/components/invoice/LateFeeToggle";
 import { getPendingPurchases, createInvoice, getInvoiceDetail, approveInvoice, getClientInvoices, removeItemFromInvoice, reopenInvoice, generateAccessToken, getClientPendingBalance, getClientAvailableDeposits, annulInvoice, annulInvoicePreview, updateInvoiceSaldoPendiente, updatePurchase, getTenantSettings, auditInvoice, recalcInvoice, getLives, reassignPurchaseLive } from "@/lib/api";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -1467,16 +1468,11 @@ export default function InvoiceDialog({ open, onOpenChange, client, tenantInfo, 
                             />
                           </div>
                         </div>
-                        {/* Late Fee / Recargo por Mora */}
-                        {currentInvoice.late_fee_applied && currentInvoice.late_fee_amount > 0 && (
-                          <div className="flex justify-between text-sm bg-amber-50 -mx-4 px-4 py-1.5 border-y border-amber-200">
-                            <span className="text-amber-700 font-medium flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {currentInvoice.late_fee_description || 'Recargo por mora'}:
-                            </span>
-                            <span className="font-bold text-amber-700">${currentInvoice.late_fee_amount.toFixed(2)}</span>
-                          </div>
-                        )}
+                        {/* Late Fee / Cobro por retraso (manual toggle) */}
+                        <LateFeeToggle
+                          invoice={currentInvoice}
+                          onChanged={async () => { const r = await getInvoiceDetail(currentInvoice.id); setCurrentInvoice(r.data); loadInvoices(); }}
+                        />
                         {/* Divider before Total */}
                         <div className="border-t border-gray-300 pt-2 mt-2">
                           <div className="flex justify-between">

@@ -1036,7 +1036,7 @@ async def recalculate_client_invoices(tenant_id: str, customer_id: str,
     
     all_invoices = await db.invoices.find(
         {"customer_id": customer_id, "tenant_id": tenant_id, "is_annulled": {"$ne": True}},
-        {"_id": 0, "id": 1, "invoice_number": 1, "total": 1, "saldo_pendiente": 1, "saldo_a_favor_anterior": 1, "shipping_cost": 1, "created_at": 1, "applied_deposits": 1}
+        {"_id": 0, "id": 1, "invoice_number": 1, "total": 1, "saldo_pendiente": 1, "saldo_a_favor_anterior": 1, "shipping_cost": 1, "created_at": 1, "applied_deposits": 1, "late_fee_applied": 1, "late_fee_amount": 1}
     ).sort("created_at", 1).to_list(20000)
 
     # Snapshot existing assignments BEFORE we recompute, so historical
@@ -1184,7 +1184,8 @@ async def recalculate_client_invoices(tenant_id: str, customer_id: str,
         else:
             saldo_pendiente_dyn = round(float(carry_saldo_pendiente), 2)
 
-        inv_total = (inv_doc.get("total", 0) or 0) + saldo_pendiente_dyn + inv_doc.get("_effective_shipping", inv_doc.get("shipping_cost", 0) or 0)
+        late_fee = float(inv_doc.get("late_fee_amount") or 0) if inv_doc.get("late_fee_applied") else 0
+        inv_total = (inv_doc.get("total", 0) or 0) + saldo_pendiente_dyn + inv_doc.get("_effective_shipping", inv_doc.get("shipping_cost", 0) or 0) + late_fee
         saldo_ant = carry_saldo_a_favor
         total_credits = total_deposits + saldo_ant
 
@@ -7528,8 +7529,8 @@ async def calculate_and_apply_late_fee(invoice: dict, tenant: dict, shipment: di
     - Late fee applies on Thursday 23:59 (after week closes Wednesday 23:59)
     - Fee amount comes from the shipping_category's late_fee value
     """
-    # Skip if already applied or annulled
-    if invoice.get("late_fee_applied") or invoice.get("is_annulled"):
+    # Skip if already applied, annulled, or the admin set it manually
+    if invoice.get("late_fee_applied") or invoice.get("is_annulled") or invoice.get("late_fee_manual"):
         return invoice
     
     # Skip if late fee not enabled for tenant
@@ -7606,6 +7607,60 @@ async def calculate_and_apply_late_fee(invoice: dict, tenant: dict, shipment: di
         invoice["total_a_pagar"] = round(invoice.get("total_a_pagar", 0) + late_fee_amount, 2)
     
     return invoice
+
+
+class LateFeeToggle(BaseModel):
+    enabled: bool
+    amount: Optional[float] = None
+
+@api_router.put("/invoices/{invoice_id}/late-fee")
+async def toggle_invoice_late_fee(invoice_id: str, data: LateFeeToggle, current_user: dict = Depends(get_current_user)):
+    """Admin adds/removes the late fee on an invoice. Manual choice wins over the automatic rule."""
+    if current_user["role"] not in ["admin", "employee"]:
+        raise HTTPException(status_code=403, detail="No autorizado")
+    if current_user["role"] == "employee" and not await check_employee_permission(current_user["user_id"], "manage_invoices"):
+        raise HTTPException(status_code=403, detail="Sin permiso para gestionar facturas")
+    tid = current_user["tenant_id"]
+    invoice = await db.invoices.find_one({"id": invoice_id, "tenant_id": tid}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Factura no encontrada")
+    if invoice.get("is_annulled"):
+        raise HTTPException(status_code=400, detail="La factura está anulada")
+    tenant = await db.tenants.find_one({"id": tid}, {"_id": 0, "shipping_categories": 1, "late_fee_description": 1}) or {}
+    before = {"applied": bool(invoice.get("late_fee_applied")), "amount": invoice.get("late_fee_amount") or 0}
+    updates = {"late_fee_manual": True}
+    if data.enabled:
+        amount = data.amount
+        category = invoice.get("late_fee_category")
+        if amount is None:
+            amount = invoice.get("late_fee_amount") or 0
+            if amount <= 0:
+                shipment = await db.shipments.find_one({"invoice_id": invoice_id, "tenant_id": tid}, {"_id": 0, "shipping_category": 1})
+                category = (shipment or {}).get("shipping_category")
+                cat = next((c for c in tenant.get("shipping_categories") or [] if c.get("key") == category), None)
+                amount = float((cat or {}).get("late_fee") or 0)
+        if amount <= 0:
+            raise HTTPException(status_code=400, detail="Ingresa el monto del cobro por retraso")
+        updates.update({
+            "late_fee_applied": True,
+            "late_fee_amount": round(float(amount), 2),
+            "late_fee_description": invoice.get("late_fee_description") or tenant.get("late_fee_description") or "Recargo por demora en pago",
+            "late_fee_applied_at": datetime.now(timezone.utc).isoformat(),
+            "late_fee_category": category,
+        })
+    else:
+        updates["late_fee_applied"] = False
+    await db.invoices.update_one({"id": invoice_id, "tenant_id": tid}, {"$set": updates})
+    await recalculate_client_invoices(tid, invoice["customer_id"])
+    actor_name = await get_actor_name(current_user["user_id"])
+    await log_audit_action(
+        tenant_id=tid, user_id=current_user["user_id"], user_name=actor_name, user_role=current_user["role"],
+        action="invoice_late_fee_toggled", entity_type="invoice", entity_id=invoice_id,
+        entity_name=f"{invoice.get('invoice_number', '')} ({invoice.get('customer_id', '')})",
+        details={"before": before, "after": {"applied": data.enabled, "amount": updates.get("late_fee_amount", 0)}},
+    )
+    updated = await db.invoices.find_one({"id": invoice_id, "tenant_id": tid}, {"_id": 0})
+    return {"message": "Cobro por retraso actualizado", "invoice": updated}
 
 
 @api_router.get("/invoices/{invoice_id}")
@@ -10243,6 +10298,7 @@ async def get_audit_actions(current_user: dict = Depends(get_current_user)):
         {"value": "create_purchase", "label": "Crear compra"},
         {"value": "update_purchase", "label": "Editar compra"},
         {"value": "invoice_totals_updated", "label": "Total de factura actualizado"},
+        {"value": "invoice_late_fee_toggled", "label": "Cobro por retraso"},
         {"value": "delete_purchase", "label": "Eliminar compra"},
         {"value": "approve_recharge", "label": "Aprobar recarga"},
         {"value": "reject_recharge", "label": "Rechazar recarga"},
