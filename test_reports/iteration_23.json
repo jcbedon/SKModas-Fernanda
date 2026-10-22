@@ -1,0 +1,17 @@
+{
+  "summary": "Frontend-only test of new 'Agregar Paquete de otra categoría' button (edit-add-package-single) in ShipmentEditDialog single mode. Created a single-category shipment G×4 ($128) for M5358 via UI on a seeded TEST invoice. Clicking Editar showed the button. Clicking it switched to package rows with row0=G qty 4 and row1 empty (qty 1, no category); total stayed 128. Setting row1 to B×1 made the total $180.00 (read-only). After saving, the list showed 'G×4 · B×1 - $180.00 • 5 paquetes' and the DB invoice shipping_cost was 180. On reopen the rows were still there; removing row1 put the total back to $128 and saving persisted it (list 'Categoría G - $128.00 • 4 paquetes', invoice shipping_cost 128). Reopening then showed single mode again with the button visible. Regression: 'Agregar Tracking' added a tracking input and TESTTRK123 was saved and shown in the list.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/seed_multi_pkg_ui.py"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "If the admin converts to multi rows and saves with row 2's category still empty, the backend (_price_shipment_packages) silently skips that row and the frontend does no validation. Consider showing a toast or validating instead.",
+    "Once in multi mode there is no way back to single mode without saving and reopening. Minor UX point."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "seed_data_creation": "Seeded TEST-UI-MULTI/TEST-UI-LEGACY invoices for M5358 via seed_multi_pkg_ui.py and created 1 shipment via the UI. All of it was removed with cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login uses the visible input: '[data-testid=login-identifier-input]:visible' (there are 2 inputs). Use seed_multi_pkg_ui.py seed|show|cleanup. Tenant rates: G 32, A 42, B 52 (packages mode)."
+}
