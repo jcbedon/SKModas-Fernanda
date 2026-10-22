@@ -1,3 +1,4 @@
+import { getWeekKey } from "@/lib/weekKey";
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/App";
@@ -18,24 +19,10 @@ import {
 } from "lucide-react";
 import { getShipmentParts, formatShipmentParts } from "@/lib/shipmentPackages";
 
-// Week boundary helper: Monday 12:00 local → next Monday 11:59:59 local.
-// Returns an ISO date string of the start-Monday at noon, used as a stable bucket key.
-function getWeekKey(dateStr) {
-  const d = new Date(dateStr);
-  const day = d.getDay();
-  const daysSinceMonday = (day - 1 + 7) % 7;
-  const candidate = new Date(d);
-  candidate.setDate(d.getDate() - daysSinceMonday);
-  candidate.setHours(12, 0, 0, 0);
-  if (candidate > d) candidate.setDate(candidate.getDate() - 7);
-  return candidate.toISOString().slice(0, 10);
-}
-
 function getWeekLabel(weekKey) {
-  // weekKey is an ISO date (yyyy-mm-dd) for the start-Monday.
   const start = new Date(`${weekKey}T12:00:00`);
   const end = new Date(start);
-  end.setDate(start.getDate() + 7);
+  end.setDate(start.getDate() + 6);
   const fmt = (dt) => {
     const day = dt.getDate();
     // Month name capitalized (es-ES returns lowercase like "abril").
@@ -43,7 +30,7 @@ function getWeekLabel(weekKey) {
     const month = monthRaw.charAt(0).toUpperCase() + monthRaw.slice(1);
     return `${day}-${month}`;
   };
-  return `Lunes ${fmt(start)} - Lunes ${fmt(end)}`;
+  return `Jueves ${fmt(start)} - Miércoles ${fmt(end)}`;
 }
 
 const DEFAULT_LOGO = "https://customer-assets.emergentagent.com/job_compraenvivo/artifacts/qvyfsb43_WhatsApp%20Image%202026-02-03%20at%208.05.08%20PM.jpeg";

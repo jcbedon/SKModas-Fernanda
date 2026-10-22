@@ -1,3 +1,4 @@
+import { getWeekKey } from "@/lib/weekKey";
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/App";
@@ -14,26 +15,11 @@ import {
   ArrowLeft, Truck, Search, ChevronRight, FileText, Users, AlertCircle,
 } from "lucide-react";
 
-// Week boundary helper: Monday 12:00 local → next Monday 11:59:59 local.
-// Returns an ISO date string (yyyy-mm-dd) of the start-Monday at noon as a stable bucket key.
-function getWeekKey(dateStr) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return "";
-  const day = d.getDay();
-  const daysSinceMonday = (day - 1 + 7) % 7;
-  const candidate = new Date(d);
-  candidate.setDate(d.getDate() - daysSinceMonday);
-  candidate.setHours(12, 0, 0, 0);
-  if (candidate > d) candidate.setDate(candidate.getDate() - 7);
-  return candidate.toISOString().slice(0, 10);
-}
-
 // Compact label, e.g. "10–17 Feb" or "27 Ene–3 Feb" when months differ.
 function getWeekLabelShort(weekKey) {
   const start = new Date(`${weekKey}T12:00:00`);
   const end = new Date(start);
-  end.setDate(start.getDate() + 7);
+  end.setDate(start.getDate() + 6);
   const monthShort = (dt) => {
     const m = dt.toLocaleDateString("es-ES", { month: "short" }).replace(".", "");
     return m.charAt(0).toUpperCase() + m.slice(1);
@@ -52,16 +38,7 @@ export default function AdminPendingShipments() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({ clients: [], invoices_count: 0, clients_count: 0 });
   const [filter, setFilter] = useState("");
-  const [weekFilter, setWeekFilter] = useState(() => {
-    const now = new Date();
-    const day = now.getDay();
-    const daysSinceMonday = (day - 1 + 7) % 7;
-    const candidate = new Date(now);
-    candidate.setDate(now.getDate() - daysSinceMonday);
-    candidate.setHours(12, 0, 0, 0);
-    if (candidate > now) candidate.setDate(candidate.getDate() - 7);
-    return candidate.toISOString().slice(0, 10);
-  });
+  const [weekFilter, setWeekFilter] = useState(() => getWeekKey(new Date().toISOString()));
 
   useEffect(() => {
     (async () => {
@@ -76,7 +53,7 @@ export default function AdminPendingShipments() {
     })();
   }, []);
 
-  // Every Monday-bucket present across all pending invoices, desc.
+  // Every week bucket present across all pending invoices, desc.
   // Always include the current week so the default filter has a matching option.
   const weekOptions = useMemo(() => {
     const set = new Set();

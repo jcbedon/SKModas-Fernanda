@@ -1,0 +1,26 @@
+{
+  "summary": "Retest of the 2 HIGH bugs from iteration_21, plus a multi-package regression. All done through the UI (admin test@preview.com) with DB checks. BUG 1 FIXED: created A×2 ($84) with the Nuevo form, then edited it in single mode to B×3. The edit total was 156.00. The list shows 'Categoría B - $156.00 • 3 paquetes' and invoice shipping_cost is 156. The courier widget is $135 (45×3). The Packages Report shows B / 3 paq / 1 client / $156 (KPIs 3 paq, $156). DB shipment.packages=None. BUG 2 FIXED: on Wed Oct 21 23:48 UTC the week Select defaulted to 'Jueves 15-Octubre - Miércoles 21-Octubre (0)'. That matches an option, and the DB has no shipments that week, so it is empty correctly. After the week changed at Thu 00:00 the default became 'Jueves 22-Octubre - Miércoles 28-Octubre' and new shipments showed on load and after reload. REGRESSION PASS: G×1 + B×2 create makes the form total $136.00 and the card 'G×1 · B×2 - $136.00 • 3 paquetes'. The edit dialog shows 2 package rows (1×$32=$32, 2×$52=$104) and a readOnly total 136.00. The helper text reads 'Suma de todos los paquetes según su categoría.' and the tracking button reads 'Agregar Tracking'. Changing B qty to 3 recalculates to 188.00. Save persists: card 'G×1 · B×3 - $188.00 • 4 paquetes', DB packages [G1/32, B3/156], invoice shipping_cost 188. Courier widget goes $260 -> $305, which is correct. Single-mode helper text is unchanged. No console errors. Test data cleaned up.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Packages Report (/admin/packages-report)", "issues": ["The week selector still uses Monday-to-Monday weeks ('Lunes 19-Octubre - Lunes 26-Octubre'), while /admin/shipments uses Thursday-to-Wednesday weeks. The two pages can count different shipments for 'the same week'. This existed before this fix and is outside the request; flagging it for consistency.", "The category label shows the key ('B | B'), not the tenant label. This was already known and is out of scope."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/seed_multi_pkg_ui.py", "/app/backend/tests/ship_week_check.py"],
+  "action_items": ["Optional: move the Packages Report week selector to the same Thursday 00:00 -> Wednesday 23:59 week helper as AdminShipments."],
+  "critical_code_review_comments": [
+    "update_shipment: packages is set to None only when shipping_category or package_count is sent. A legacy edit that sends only shipping_cost would leave a stale packages array. The current UI always sends both, so this does not happen today.",
+    "getWeekKey/getCurrentWeekKey in AdminShipments.jsx are near-duplicates. AdminPackagesReport has its own Monday-based getWeekKey. Extract one shared utility.",
+    "AdminShipments.jsx is still about 2050 lines; consider splitting it."
+  ],
+  "updated_files": ["/app/backend/tests/ship_week_check.py (new read-only helper)"],
+  "success_rate": {"backend": "n/a (frontend only)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "Seeded TEST-UI-MULTI / TEST-UI-LEGACY invoices for M5358 and created 2 shipments in the UI. All removed with seed_multi_pkg_ui.py cleanup.",
+  "test_credentials": "test@preview.com / test123. The login inputs use placeholders 'Usuario' / 'Contraseña'; use visible=true because there are hidden duplicates.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use 'python /app/backend/tests/seed_multi_pkg_ui.py seed|show|cleanup' for test invoices. Tenant rates: G 32/35 courier, A 42/35, B 52/45 (packages mode).",
+  "rca of the issue": "Both earlier bugs were resolved by the main agent: (1) the PUT handler now nulls packages on a single-category edit; (2) the Monday-noon getWeekKey shadows were removed, so the default week key and the option keys match."
+}
