@@ -9644,15 +9644,18 @@ async def get_collections_report(start: Optional[str] = None, end: Optional[str]
 
     rows = []
     for uid, client in by_uid.items():
+        remaining = round(max(0.0, client.get("real_debt") or 0), 2)
         since = first_owed.get(client["customer_id"])
         if since is None:
-            continue
+            if remaining <= 0.01:
+                continue
+            since = ""
         paid = sorted((d for d in deps_by_uid.get(uid, []) if (d.get("created_at") or "") >= since),
                       key=lambda d: d.get("created_at") or "", reverse=True)
         in_period = [d for d in paid if (not start or d["created_at"] >= start) and (not end or d["created_at"] <= end)]
-        if not in_period:
+        # Every current debtor is listed, even without payments; payers only if they paid in the period.
+        if not in_period and remaining <= 0.01:
             continue
-        remaining = round(max(0.0, client.get("real_debt") or 0), 2)
         cats, unshipped_paid = {}, []
         for inv in invoices:
             if inv.get("customer_id") != client["customer_id"] or (inv.get("created_at") or "") < since:
@@ -9673,8 +9676,9 @@ async def get_collections_report(start: Optional[str] = None, end: Optional[str]
             "is_paid": remaining <= 0.01,
             "paid_in_period": round(sum(d.get("amount") or 0 for d in in_period), 2),
             "payments_count": len(in_period),
-            "last_payment_at": in_period[0]["created_at"],
-            "last_payment_amount": round(in_period[0].get("amount") or 0, 2),
+            "has_payments": bool(in_period),
+            "last_payment_at": (in_period or paid or [{}])[0].get("created_at"),
+            "last_payment_amount": round((in_period or paid or [{}])[0].get("amount") or 0, 2),
             "payments": [{"amount": round(d.get("amount") or 0, 2), "created_at": d["created_at"]} for d in in_period[:20]],
             "last_invoice_number": client.get("last_invoice_number"),
             "packages_total": sum(cats.values()),
@@ -9682,11 +9686,14 @@ async def get_collections_report(start: Optional[str] = None, end: Optional[str]
             "paid_without_shipment": len(unshipped_paid) > 0,
             "unshipped_paid_invoices": unshipped_paid,
         })
-    rows.sort(key=lambda r: r["last_payment_at"], reverse=True)
+    payers = sorted((r for r in rows if r["has_payments"]), key=lambda r: r["last_payment_at"], reverse=True)
+    debtors = sorted((r for r in rows if not r["has_payments"]), key=lambda r: r["remaining"], reverse=True)
+    rows = payers + debtors
     return {
         "clients": rows,
         "totals": {
-            "clients_count": len(rows),
+            "clients_count": len(payers),
+            "unpaid_debtors_count": len(debtors),
             "total_paid": round(sum(r["paid_in_period"] for r in rows), 2),
             "total_remaining": round(sum(r["remaining"] for r in rows), 2),
             "paid_off_count": sum(1 for r in rows if r["is_paid"]),

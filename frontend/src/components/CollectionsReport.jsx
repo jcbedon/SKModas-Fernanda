@@ -36,6 +36,8 @@ const waUrl = (c, tenantName) => {
   if (digits.length === 10 && digits.startsWith("0")) digits = "593" + digits.slice(1);
   const msg = c.is_paid
     ? `Hola ${c.name}, gracias por tu pago de ${fmtMoney(c.last_payment_amount)}. Tu factura ya está cancelada. ¡Gracias por comprar con ${tenantName}!`
+    : !c.has_payments
+    ? `Hola ${c.name}, te recordamos que tienes un saldo pendiente de ${fmtMoney(c.remaining)} en tu factura. ¡Gracias! — ${tenantName}`
     : `Hola ${c.name}, recibimos tu abono de ${fmtMoney(c.last_payment_amount)}. Te falta pagar ${fmtMoney(c.remaining)} para completar tu factura. ¡Gracias! — ${tenantName}`;
   return `https://wa.me/${digits}?text=${encodeURIComponent(msg)}`;
 };
@@ -48,7 +50,13 @@ const CollectionRow = ({ c, idx, tenantName }) => {
         <span className="text-xs font-bold text-slate-400 w-6">{idx + 1}</span>
         <div className="flex-1 min-w-[160px]">
           <p className="font-semibold text-slate-800">{c.name} <Badge variant="outline" className="ml-1 text-[10px]">#{c.customer_id}</Badge></p>
-          <p className="text-xs text-slate-500">Último pago: {fmtDate(c.last_payment_at)} · <span className="font-semibold text-green-700">{fmtMoney(c.last_payment_amount)}</span></p>
+          {c.has_payments ? (
+            <p className="text-xs text-slate-500">Último pago: {fmtDate(c.last_payment_at)} · <span className="font-semibold text-green-700">{fmtMoney(c.last_payment_amount)}</span></p>
+          ) : (
+            <p className="text-xs text-red-600 font-semibold" data-testid={`collection-no-payments-${c.customer_id}`}>
+              Sin abonos en este período{c.last_payment_at ? ` · último pago ${fmtDate(c.last_payment_at)}` : ""}
+            </p>
+          )}
         </div>
         <div className="min-w-[120px]" data-testid={`collection-packages-${c.customer_id}`}>
           <p className="text-[10px] uppercase text-slate-400">Paquetes</p>
@@ -156,8 +164,9 @@ export default function CollectionsReport() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[["Clientes que abonaron", t.clients_count ?? 0, "text-slate-800", "collections-kpi-clients"],
+          ["Deben sin abonar", t.unpaid_debtors_count ?? 0, "text-red-600", "collections-kpi-unpaid"],
           ["Total abonado", fmtMoney(t.total_paid), "text-green-700", "collections-kpi-paid"],
           ["Falta por cobrar", fmtMoney(t.total_remaining), "text-red-600", "collections-kpi-remaining"],
           ["Ya pagaron todo", t.paid_off_count ?? 0, "text-emerald-600", "collections-kpi-paidoff"]].map(([l, v, cls, id]) => (
@@ -168,11 +177,11 @@ export default function CollectionsReport() {
       {loading ? (
         <p className="text-sm text-slate-500 text-center py-8">Cargando...</p>
       ) : rows.length === 0 ? (
-        <Card className="rounded-xl border-dashed"><CardContent className="p-8 text-center text-slate-500"><HandCoins className="h-10 w-10 mx-auto text-slate-300 mb-2" />{onlyUnshipped ? "No hay clientes con factura pagada sin envío en este período" : "Nadie con factura pendiente ha abonado en este período"}</CardContent></Card>
+        <Card className="rounded-xl border-dashed"><CardContent className="p-8 text-center text-slate-500"><HandCoins className="h-10 w-10 mx-auto text-slate-300 mb-2" />{onlyUnshipped ? "No hay clientes con factura pagada sin envío en este período" : "No hay clientes con deuda ni abonos en este período"}</CardContent></Card>
       ) : (
         <div className="space-y-2">{rows.map((c, i) => <CollectionRow key={c.id} c={c} idx={i} tenantName={tenantName} />)}</div>
       )}
-      <p className="text-[11px] text-slate-400">Ordenado por el pago más reciente. Incluye clientes con factura pendiente o que la terminaron de pagar con recargas posteriores a la factura.</p>
+      <p className="text-[11px] text-slate-400">Primero los que abonaron (pago más reciente arriba), luego los que deben y no han abonado (mayor deuda arriba). Incluye a todo cliente con saldo pendiente.</p>
     </div>
   );
 }
