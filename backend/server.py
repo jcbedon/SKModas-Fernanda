@@ -9616,8 +9616,14 @@ async def get_collections_report(start: Optional[str] = None, end: Optional[str]
     by_uid = {c["id"]: c for c in debts["clients"]}
     invoices = await db.invoices.find(
         {"tenant_id": tid, "is_annulled": {"$ne": True}},
-        {"_id": 0, "customer_id": 1, "created_at": 1, "total_a_pagar": 1, "applied_deposits": 1}
+        {"_id": 0, "id": 1, "invoice_number": 1, "customer_id": 1, "created_at": 1, "total_a_pagar": 1, "applied_deposits": 1, "shipment_id": 1}
     ).to_list(None)
+    shipments = await db.shipments.find(
+        {"tenant_id": tid, "invoice_id": {"$nin": [None, ""]}},
+        {"_id": 0, "id": 1, "invoice_id": 1, "packages": 1, "shipping_category": 1, "package_count": 1}
+    ).to_list(None)
+    ship_by_inv = {sh["invoice_id"]: sh for sh in shipments}
+    ship_by_id = {sh["id"]: sh for sh in shipments}
     deposits = await db.wallet_transactions.find(
         {"tenant_id": tid, "type": "deposit", "status": "approved", "is_deleted": {"$ne": True}},
         {"_id": 0, "id": 1, "user_id": 1, "amount": 1, "created_at": 1}
@@ -9647,6 +9653,17 @@ async def get_collections_report(start: Optional[str] = None, end: Optional[str]
         if not in_period:
             continue
         remaining = round(max(0.0, client.get("real_debt") or 0), 2)
+        cats, unshipped_paid = {}, []
+        for inv in invoices:
+            if inv.get("customer_id") != client["customer_id"] or (inv.get("created_at") or "") < since:
+                continue
+            sh = ship_by_inv.get(inv["id"]) or ship_by_id.get(inv.get("shipment_id") or "")
+            if sh:
+                for part in sh.get("packages") or [{"shipping_category": sh.get("shipping_category"), "package_count": sh.get("package_count")}]:
+                    key = str(part.get("shipping_category") or "—").upper()
+                    cats[key] = cats.get(key, 0) + int(round(float(part.get("package_count") or 0)))
+            elif (inv.get("total_a_pagar") or 0) <= 0.01:
+                unshipped_paid.append(inv.get("invoice_number"))
         rows.append({
             "id": uid,
             "customer_id": client["customer_id"],
@@ -9660,6 +9677,10 @@ async def get_collections_report(start: Optional[str] = None, end: Optional[str]
             "last_payment_amount": round(in_period[0].get("amount") or 0, 2),
             "payments": [{"amount": round(d.get("amount") or 0, 2), "created_at": d["created_at"]} for d in in_period[:20]],
             "last_invoice_number": client.get("last_invoice_number"),
+            "packages_total": sum(cats.values()),
+            "packages_breakdown": " · ".join(f"{k}×{v}" for k, v in sorted(cats.items())),
+            "paid_without_shipment": len(unshipped_paid) > 0,
+            "unshipped_paid_invoices": unshipped_paid,
         })
     rows.sort(key=lambda r: r["last_payment_at"], reverse=True)
     return {
@@ -9669,6 +9690,7 @@ async def get_collections_report(start: Optional[str] = None, end: Optional[str]
             "total_paid": round(sum(r["paid_in_period"] for r in rows), 2),
             "total_remaining": round(sum(r["remaining"] for r in rows), 2),
             "paid_off_count": sum(1 for r in rows if r["is_paid"]),
+            "paid_without_shipment_count": sum(1 for r in rows if r["paid_without_shipment"]),
         },
     }
 

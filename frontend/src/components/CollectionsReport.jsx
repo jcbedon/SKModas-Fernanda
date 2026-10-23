@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileDown, Search, Calendar, MessageCircle, ChevronDown, ChevronUp, HandCoins } from "lucide-react";
+import { FileDown, Search, Calendar, MessageCircle, ChevronDown, ChevronUp, HandCoins, Package, Truck } from "lucide-react";
 
 const fmtMoney = (v) => "$" + Number(v || 0).toFixed(2);
 const fmtDate = (s) => new Date(s).toLocaleString("es-EC", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -50,6 +50,17 @@ const CollectionRow = ({ c, idx, tenantName }) => {
           <p className="font-semibold text-slate-800">{c.name} <Badge variant="outline" className="ml-1 text-[10px]">#{c.customer_id}</Badge></p>
           <p className="text-xs text-slate-500">Último pago: {fmtDate(c.last_payment_at)} · <span className="font-semibold text-green-700">{fmtMoney(c.last_payment_amount)}</span></p>
         </div>
+        <div className="min-w-[120px]" data-testid={`collection-packages-${c.customer_id}`}>
+          <p className="text-[10px] uppercase text-slate-400">Paquetes</p>
+          {c.packages_total > 0
+            ? <p className="text-sm font-semibold text-slate-700 flex items-center gap-1"><Package className="h-3.5 w-3.5 text-indigo-500" />{c.packages_total} · <span className="text-xs text-slate-500">{c.packages_breakdown}</span></p>
+            : <p className="text-xs text-slate-400">Sin paquetes</p>}
+          {c.paid_without_shipment && (
+            <Badge className="mt-0.5 bg-orange-100 text-orange-700 hover:bg-orange-100 text-[10px] gap-1" data-testid={`collection-unshipped-${c.customer_id}`}>
+              <Truck className="h-3 w-3" />Pagado sin envío: {c.unshipped_paid_invoices.join(", ")}
+            </Badge>
+          )}
+        </div>
         <div className="text-right">
           <p className="text-[10px] uppercase text-slate-400">Abonado</p>
           <p className="font-bold text-green-700" data-testid={`collection-paid-${c.customer_id}`}>{fmtMoney(c.paid_in_period)}</p>
@@ -88,6 +99,7 @@ export default function CollectionsReport() {
   const [week, setWeek] = useState(weeks[0].key);
   const [day, setDay] = useState(days[0].key);
   const [search, setSearch] = useState("");
+  const [onlyUnshipped, setOnlyUnshipped] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -104,6 +116,7 @@ export default function CollectionsReport() {
   }, [range]);
 
   const rows = (data?.clients || []).filter((c) => {
+    if (onlyUnshipped && !c.paid_without_shipment) return false;
     const t = search.trim().toLowerCase();
     return !t || c.name.toLowerCase().includes(t) || c.customer_id.toLowerCase().includes(t);
   });
@@ -124,12 +137,21 @@ export default function CollectionsReport() {
             <SelectContent>{(mode === "week" ? weeks : days).map((o) => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}</SelectContent>
           </Select>
         )}
+        <Button size="sm" variant="outline" onClick={() => setOnlyUnshipped(!onlyUnshipped)}
+          className={`rounded-xl gap-1 h-9 ${onlyUnshipped ? "bg-orange-500 hover:bg-orange-600 text-white border-orange-500" : "border-orange-300 text-orange-700"}`}
+          data-testid="collections-unshipped-filter">
+          <Truck className="h-4 w-4" /> Pagado sin envío ({data?.totals?.paid_without_shipment_count ?? 0})
+        </Button>
         <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nombre o ID..." className="pl-9 rounded-xl h-9" data-testid="collections-search" />
         </div>
         <Button className="rounded-xl gap-2 h-9 bg-emerald-600 hover:bg-emerald-700 text-white" disabled={!rows.length} data-testid="collections-pdf-btn"
-          onClick={() => generateCollectionsReportPDF({ tenantName: user?.tenant_name, clients: rows, totals: t, periodLabel })}>
+          onClick={() => generateCollectionsReportPDF({ tenantName: user?.tenant_name, clients: rows, totals: {
+            total_paid: rows.reduce((a, c) => a + c.paid_in_period, 0),
+            total_remaining: rows.reduce((a, c) => a + c.remaining, 0),
+            paid_off_count: rows.filter((c) => c.is_paid).length,
+          }, periodLabel: onlyUnshipped ? `${periodLabel} · Pagado sin envío` : periodLabel })}>
           <FileDown className="h-4 w-4" /> Descargar PDF
         </Button>
       </div>
@@ -146,7 +168,7 @@ export default function CollectionsReport() {
       {loading ? (
         <p className="text-sm text-slate-500 text-center py-8">Cargando...</p>
       ) : rows.length === 0 ? (
-        <Card className="rounded-xl border-dashed"><CardContent className="p-8 text-center text-slate-500"><HandCoins className="h-10 w-10 mx-auto text-slate-300 mb-2" />Nadie con factura pendiente ha abonado en este período</CardContent></Card>
+        <Card className="rounded-xl border-dashed"><CardContent className="p-8 text-center text-slate-500"><HandCoins className="h-10 w-10 mx-auto text-slate-300 mb-2" />{onlyUnshipped ? "No hay clientes con factura pagada sin envío en este período" : "Nadie con factura pendiente ha abonado en este período"}</CardContent></Card>
       ) : (
         <div className="space-y-2">{rows.map((c, i) => <CollectionRow key={c.id} c={c} idx={i} tenantName={tenantName} />)}</div>
       )}

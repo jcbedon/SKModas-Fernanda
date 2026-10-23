@@ -23,11 +23,12 @@ export function generateCollectionsReportPDF({ tenantName, clients, totals, peri
   doc.text(`Generado: ${new Date().toLocaleString("es-EC")}`, pageW - margin, 26, { align: "right" });
 
   autoTable(doc, {
-    head: [["#", "Cliente", "ID", "WhatsApp", "Último pago", "Monto último", "Abonado período", "Pagos", "Falta pagar", "Estado"]],
+    head: [["#", "Cliente", "ID", "WhatsApp", "Último pago", "Monto último", "Abonado período", "Pagos", "Falta pagar", "Estado", "Paquetes"]],
     body: clients.map((c, i) => [
       i + 1, c.name || "—", `#${c.customer_id}`, c.whatsapp || "—", fmtDate(c.last_payment_at),
       fmtMoney(c.last_payment_amount), fmtMoney(c.paid_in_period), c.payments_count,
-      fmtMoney(c.remaining), c.is_paid ? "Pagado" : "Debe",
+      fmtMoney(c.remaining), c.paid_without_shipment ? "Pagado sin envío" : c.is_paid ? "Pagado" : "Debe",
+      c.packages_total > 0 ? `${c.packages_total} (${c.packages_breakdown})` : "Sin paquetes",
     ]),
     startY: 78,
     margin: { left: margin, right: margin },
@@ -48,7 +49,7 @@ export function generateCollectionsReportPDF({ tenantName, clients, totals, peri
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.text(
-    `Clientes: ${totals?.clients_count ?? clients.length}   ·   Abonado: ${fmtMoney(totals?.total_paid)}   ·   Falta por cobrar: ${fmtMoney(totals?.total_remaining)}   ·   Ya pagaron todo: ${totals?.paid_off_count ?? 0}`,
+    `Clientes: ${clients.length}   ·   Abonado: ${fmtMoney(totals?.total_paid)}   ·   Falta por cobrar: ${fmtMoney(totals?.total_remaining)}   ·   Ya pagaron todo: ${totals?.paid_off_count ?? 0}`,
     margin, y
   );
   doc.save(`reporte_cobranza_${Date.now()}.pdf`);
