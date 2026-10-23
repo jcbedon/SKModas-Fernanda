@@ -50,14 +50,14 @@ export function generateCollectionsReportPDF({ tenantName, clients, totals, peri
         fmtMoney(c.last_payment_amount), fmtMoney(c.paid_in_period), c.payments_count,
         fmtMoney(c.remaining),
         c.paid_without_shipment ? `Pagado sin envío: ${(c.unshipped_paid_invoices || []).join(", ")}` : c.is_paid ? "Pagado" : c.has_payments ? "Debe" : "Debe · sin abonos",
-        c.packages_total > 0 ? `${c.packages_total} (${c.packages_breakdown})` : "Sin paquetes",
+        c.packages_total > 0 ? String(c.packages_total) : "0",
       ]),
       startY: y,
       margin: { left: margin, right: margin },
       styles: { fontSize: 8, cellPadding: 4, lineColor: [226, 232, 240], lineWidth: 0.5 },
       headStyles: { fillColor: [30, 58, 95], textColor: 255, fontStyle: "bold" },
       alternateRowStyles: { fillColor: [248, 250, 252] },
-      columnStyles: { 1: { fontStyle: "bold" }, 5: { halign: "right" }, 6: { halign: "right", textColor: [21, 128, 61], fontStyle: "bold" }, 7: { halign: "center" }, 8: { halign: "right", fontStyle: "bold" }, 9: { cellWidth: 95 }, 10: { fontStyle: "bold" } },
+      columnStyles: { 1: { fontStyle: "bold" }, 5: { halign: "right" }, 6: { halign: "right", textColor: [21, 128, 61], fontStyle: "bold" }, 7: { halign: "center" }, 8: { halign: "right", fontStyle: "bold" }, 9: { cellWidth: 95 }, 10: { fontStyle: "bold", halign: "center" } },
       didParseCell: (data) => {
         if (data.section !== "body") return;
         const c = list[data.row.index];

@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { getCollectionsReport } from "@/lib/api";
 import { generateCollectionsReportPDF } from "@/lib/collectionsReportPDF";
 import { getWeekKey } from "@/lib/weekKey";
+import { ReminderListDialog } from "@/components/ReminderListDialog";
+import { waUrl } from "@/lib/collectionsWhatsApp";
 import { toast } from "sonner";
 import { useAuth } from "@/App";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,16 +33,6 @@ const buildOptions = () => {
   return { weeks, days };
 };
 
-const waUrl = (c, tenantName) => {
-  let digits = String(c.whatsapp || "").replace(/[^0-9]/g, "");
-  if (digits.length === 10 && digits.startsWith("0")) digits = "593" + digits.slice(1);
-  const msg = c.is_paid
-    ? `Hola ${c.name}, gracias por tu pago de ${fmtMoney(c.last_payment_amount)}. Tu factura ya está cancelada. ¡Gracias por comprar con ${tenantName}!`
-    : !c.has_payments
-    ? `Hola ${c.name}, te recordamos que tienes un saldo pendiente de ${fmtMoney(c.remaining)} en tu factura. ¡Gracias! — ${tenantName}`
-    : `Hola ${c.name}, recibimos tu abono de ${fmtMoney(c.last_payment_amount)}. Te falta pagar ${fmtMoney(c.remaining)} para completar tu factura. ¡Gracias! — ${tenantName}`;
-  return `https://wa.me/${digits}?text=${encodeURIComponent(msg)}`;
-};
 
 const CollectionRow = ({ c, idx, tenantName }) => {
   const [open, setOpen] = useState(false);
@@ -154,6 +146,7 @@ export default function CollectionsReport() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nombre o ID..." className="pl-9 rounded-xl h-9" data-testid="collections-search" />
         </div>
+        <ReminderListDialog debtors={(data?.clients || []).filter((c) => !c.has_payments && c.remaining > 0.01)} tenantName={tenantName} />
         <Button className="rounded-xl gap-2 h-9 bg-emerald-600 hover:bg-emerald-700 text-white" disabled={!rows.length} data-testid="collections-pdf-btn"
           onClick={() => generateCollectionsReportPDF({ tenantName: user?.tenant_name, clients: rows, totals: {
             total_paid: rows.reduce((a, c) => a + c.paid_in_period, 0),
