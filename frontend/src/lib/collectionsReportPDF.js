@@ -5,7 +5,7 @@ const fmtMoney = (v) =>
   "$" + Number(v || 0).toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtDate = (s) => (s ? new Date(s).toLocaleString("es-EC", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
 
-export function generateCollectionsReportPDF({ tenantName, clients, totals, periodLabel }) {
+export function generateCollectionsReportPDF({ tenantName, clients, totals, periodLabel, sortLabel }) {
   const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const pageW = doc.internal.pageSize.getWidth();
   const margin = 40;
@@ -18,7 +18,7 @@ export function generateCollectionsReportPDF({ tenantName, clients, totals, peri
   doc.text(tenantName || "Reporte", margin, 30);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text(`Reporte de Cobranza${periodLabel ? ` — ${periodLabel}` : ""}`, margin, 48);
+  doc.text(`Reporte de Cobranza${periodLabel ? ` — ${periodLabel}` : ""}${sortLabel ? ` · Orden: ${sortLabel}` : ""}`, margin, 48);
   doc.setFontSize(8);
   doc.text(`Generado: ${new Date().toLocaleString("es-EC")}`, pageW - margin, 26, { align: "right" });
 

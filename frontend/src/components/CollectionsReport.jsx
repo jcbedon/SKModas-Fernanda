@@ -100,6 +100,7 @@ export default function CollectionsReport() {
   const [day, setDay] = useState(days[0].key);
   const [search, setSearch] = useState("");
   const [onlyUnshipped, setOnlyUnshipped] = useState(false);
+  const [sortBy, setSortBy] = useState("default");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -120,6 +121,16 @@ export default function CollectionsReport() {
     const t = search.trim().toLowerCase();
     return !t || c.name.toLowerCase().includes(t) || c.customer_id.toLowerCase().includes(t);
   });
+  const SORTERS = {
+    last_payment: (a, b) => (b.last_payment_at || "").localeCompare(a.last_payment_at || ""),
+    invoice_date: (a, b) => (b.last_invoice_date || "").localeCompare(a.last_invoice_date || ""),
+    name: (a, b) => (a.name || "").localeCompare(b.name || "", "es"),
+    debt: (a, b) => b.remaining - a.remaining,
+    paid: (a, b) => b.paid_in_period - a.paid_in_period,
+    packages: (a, b) => (b.packages_total || 0) - (a.packages_total || 0),
+  };
+  const SORT_LABELS = { last_payment: "Último recargado", invoice_date: "Fecha facturado", name: "Alfabético (A-Z)", debt: "Mayor deuda", paid: "Mayor abonado", packages: "Más paquetes" };
+  if (SORTERS[sortBy]) rows.sort(SORTERS[sortBy]);
   const periodLabel = mode === "all" ? "Todo" : mode === "week" ? weeks.find((w) => w.key === week)?.label : days.find((d) => d.key === day)?.label;
   const t = data?.totals || {};
 
@@ -146,13 +157,20 @@ export default function CollectionsReport() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nombre o ID..." className="pl-9 rounded-xl h-9" data-testid="collections-search" />
         </div>
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="w-52 rounded-xl h-9" data-testid="collections-sort-select"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">Orden: abonaron primero</SelectItem>
+            {Object.entries(SORT_LABELS).map(([k, l]) => <SelectItem key={k} value={k}>{l}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <ReminderListDialog debtors={(data?.clients || []).filter((c) => !c.has_payments && c.remaining > 0.01)} tenantName={tenantName} />
         <Button className="rounded-xl gap-2 h-9 bg-emerald-600 hover:bg-emerald-700 text-white" disabled={!rows.length} data-testid="collections-pdf-btn"
           onClick={() => generateCollectionsReportPDF({ tenantName: user?.tenant_name, clients: rows, totals: {
             total_paid: rows.reduce((a, c) => a + c.paid_in_period, 0),
             total_remaining: rows.reduce((a, c) => a + c.remaining, 0),
             paid_off_count: rows.filter((c) => c.is_paid).length,
-          }, periodLabel: onlyUnshipped ? `${periodLabel} · Pagado sin envío` : periodLabel })}>
+          }, sortLabel: SORT_LABELS[sortBy], periodLabel: onlyUnshipped ? `${periodLabel} · Pagado sin envío` : periodLabel })}>
           <FileDown className="h-4 w-4" /> Descargar PDF
         </Button>
       </div>

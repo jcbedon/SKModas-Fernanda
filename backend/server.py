@@ -9681,6 +9681,7 @@ async def get_collections_report(start: Optional[str] = None, end: Optional[str]
             "last_payment_amount": round((in_period or paid or [{}])[0].get("amount") or 0, 2),
             "payments": [{"amount": round(d.get("amount") or 0, 2), "created_at": d["created_at"]} for d in in_period[:20]],
             "last_invoice_number": client.get("last_invoice_number"),
+            "last_invoice_date": client.get("last_invoice_date"),
             "packages_total": sum(cats.values()),
             "packages_breakdown": " · ".join(f"{k}×{v}" for k, v in sorted(cats.items())),
             "paid_without_shipment": len(unshipped_paid) > 0,
