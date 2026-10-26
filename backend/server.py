@@ -12362,7 +12362,7 @@ async def _sync_expense_ledger(tid: str, expense: dict, actor: dict):
             "is_deleted": True, "deleted_at": datetime.now(timezone.utc).isoformat(), "deleted_by": actor["user_id"], "deleted_reason": "Gasto eliminado o sin cuenta"}})
         return
     await db.bank_transactions.update_one(key, {
-        "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": f"{expense['date']}T12:00:00+00:00"},
+        "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": f"{expense['date']}T17:00:00+00:00"},
         "$set": {"bank_account_id": expense["bank_account_id"], "amount": expense["amount"],
                  "description": f"Gasto: {expense.get('category_label', '')} — {expense.get('description', '')}".strip(" —"),
                  "source_transaction_id": None, "customer_id": None, "customer_name": None,
@@ -12386,6 +12386,8 @@ async def update_accounting_categories(data: dict, current_user: dict = Depends(
         if not label:
             continue
         key = str(c.get("key") or "").strip() or re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or str(uuid.uuid4())[:8]
+        while any(x["key"] == key for x in cats):
+            key = f"{key}_{uuid.uuid4().hex[:4]}"
         cats.append({"key": key, "label": label[:40], "color": c.get("color") or "#64748b", "icon": c.get("icon") or "tag"})
     if not cats:
         raise HTTPException(status_code=400, detail="Debe existir al menos una categoría")
@@ -12402,7 +12404,7 @@ async def list_expenses(start_day: str, end_day: str, current_user: dict = Depen
     return {"expenses": rows}
 
 
-async def _validated_expense_fields(tenant: dict, amount, category: str, date: str, bank_account_id: Optional[str]):
+async def _validated_expense_fields(tenant: dict, amount, category: str, date: str, bank_account_id: Optional[str], keep: dict = None):
     try:
         amount = round(float(amount), 2)
     except (TypeError, ValueError):
@@ -12410,6 +12412,8 @@ async def _validated_expense_fields(tenant: dict, amount, category: str, date: s
     if amount <= 0:
         raise HTTPException(status_code=400, detail="El monto debe ser mayor a 0")
     cat = next((c for c in _expense_categories(tenant) if c["key"] == category), None)
+    if not cat and keep and keep.get("category") == category:
+        cat = {"key": category, "label": keep.get("category_label", category)}  # category was removed later; keep it on old expenses
     if not cat:
         raise HTTPException(status_code=400, detail="Categoría no válida")
     try:
@@ -12463,7 +12467,7 @@ async def update_expense(expense_id: str, data: dict, current_user: dict = Depen
         raise HTTPException(status_code=404, detail="Gasto no encontrado")
     amount, cat, bank_account_id = await _validated_expense_fields(
         tenant, data.get("amount", old["amount"]), data.get("category", old["category"]),
-        data.get("date", old["date"]), data.get("bank_account_id", old.get("bank_account_id")))
+        data.get("date", old["date"]), data.get("bank_account_id", old.get("bank_account_id")), keep=old)
     updates = {"amount": amount, "category": cat["key"], "category_label": cat["label"], "date": data.get("date", old["date"]),
                "description": str(data.get("description", old.get("description", ""))).strip()[:200], "bank_account_id": bank_account_id,
                "updated_at": datetime.now(timezone.utc).isoformat()}

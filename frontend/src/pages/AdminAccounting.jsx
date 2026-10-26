@@ -30,6 +30,7 @@ const periodRange = (mode, offset) => {
     label = String(s.getFullYear());
   }
   const end = new Date(e); end.setHours(23, 59, 59, 999);
+  label = label.charAt(0).toUpperCase() + label.slice(1);
   return { start: s.toISOString(), end: end.toISOString(), start_day: ymd(s), end_day: ymd(e), bucket: mode === "year" ? "month" : "day", label };
 };
 
@@ -103,7 +104,7 @@ export default function AdminAccounting() {
           </div>
           <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-2xl px-1 py-1">
             <button onClick={() => setOffset(offset - 1)} className="p-1.5 rounded-xl hover:bg-slate-100" data-testid="accounting-prev"><ChevronLeft className="h-4 w-4" /></button>
-            <span className="text-sm font-semibold text-slate-700 min-w-[170px] text-center capitalize" data-testid="accounting-period-label">{range.label}</span>
+            <span className="text-sm font-semibold text-slate-700 min-w-[170px] text-center" data-testid="accounting-period-label">{range.label}</span>
             <button onClick={() => setOffset(offset + 1)} disabled={offset >= 0} className="p-1.5 rounded-xl hover:bg-slate-100 disabled:opacity-30" data-testid="accounting-next"><ChevronRight className="h-4 w-4" /></button>
           </div>
         </div>

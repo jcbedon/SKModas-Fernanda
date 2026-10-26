@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend E2E test of the new Contabilidad (accounting) module as admin test@preview.com. I tested all 10 requested flows and all of them passed: sidebar/dashboard entry, week/month/year modes with prev/next, validation toasts, creating an expense with a bank account and receipt, the Cuentas ledger sync, edit to 60 and delete with balance restore, a cash expense with no receipt, a custom 'Comida' category, PDF download, and the bar and donut charts. Test data was cleaned up afterwards.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "PUT /api/accounting/categories", "issue": "Keys made from labels are not de-duplicated. Two categories with the same label (or labels that normalise to the same key) get the same key, which merges their totals. Removing a category that existing expenses use makes later edits of those expenses fail with 400 'Categoría no válida' unless the user picks a new category."},
+    {"endpoint": "_sync_expense_ledger", "issue": "Ledger created_at is fixed to {date}T12:00:00+00:00 (UTC), so in Ecuador (UTC-5) the Cuentas row shows 07:00. This is cosmetic only."}
+  ]},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AdminAccounting income breakdown", "issues": ["Store tax shows as '$-11,65'. Use '−$11,65' to match the expense rows."]},
+      {"screen": "AdminAccounting period label", "issues": ["The 'capitalize' CSS turns 'octubre de 2026' into 'Octubre De 2026'. Capitalise only the first letter in JS."]},
+      {"screen": "Dashboard quick actions", "issues": ["The Contabilidad card sits before Cuentas, while in the sidebar it comes after Cuentas. Small ordering inconsistency."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: de-duplicate category keys in PUT /accounting/categories",
+    "Optional: fix the negative money format and the period label capitalisation"
+  ],
+  "critical_code_review_comments": [
+    "periodRange week mode calls getWeekKey(now.toISOString()). This works, but passing the Date directly is clearer.",
+    "When a category is removed, past expenses still render using category_label as a fallback, which is OK. Editing them, though, forces the user to choose a new category."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend only)", "frontend": "100%"},
+  "seed_data_creation": "Created TEST_ui nomina (45.50, edited to 60, Banco Pichincha Wilber), TEST_cash (10, no account) and category 'Comida'. All were deleted afterwards: categories restored to the 8 defaults (now stored explicitly on the tenant) and the Wilber balance is back to $2,072.55.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login inputs are duplicated in the DOM (mobile and desktop), so use the ':visible' selector. Preview clock is Oct 2026; the current week is 22–28 Oct (Thu–Wed). Deleted expense ledger rows stay in Cuentas with an 'Eliminada' badge and are excluded from the balance."
+}
