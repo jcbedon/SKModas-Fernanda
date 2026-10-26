@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv('/app/backend/.env')
 from motor.motor_asyncio import AsyncIOMotorClient
 
-API = "https://personal-shopper-13.preview.emergentagent.com/api"
+API = "https://pdf-horizontal-fix.preview.emergentagent.com/api"
 random.seed(42)
 FIRST = ["María", "Karen", "Daniela", "Andrea", "Gabriela", "Paola", "Carla", "Valeria", "Fernanda", "Lucía", "Sofía", "Camila",
          "Jessica", "Diana", "Verónica", "Mónica", "Patricia", "Elena", "Rosa", "Natalia", "Ximena", "Johanna", "Tatiana", "Lorena"]

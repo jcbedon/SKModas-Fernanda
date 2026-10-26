@@ -3,7 +3,7 @@
 ## Preview Environment
 
 ### Admin User (Full Permissions)
-- **URL:** https://personal-shopper-13.preview.emergentagent.com
+- **URL:** https://pdf-horizontal-fix.preview.emergentagent.com
 - **Email:** test@preview.com
 - **Password:** test123
 - **Role:** Admin

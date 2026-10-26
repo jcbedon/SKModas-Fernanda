@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 load_dotenv('/app/backend/.env')
 from motor.motor_asyncio import AsyncIOMotorClient
-API = "https://personal-shopper-13.preview.emergentagent.com/api"
+API = "https://pdf-horizontal-fix.preview.emergentagent.com/api"
 MARK = "TEST-COLLECT"
 
 async def main(action):

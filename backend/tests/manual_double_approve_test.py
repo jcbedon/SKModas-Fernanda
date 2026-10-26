@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 load_dotenv('/app/backend/.env')
 from motor.motor_asyncio import AsyncIOMotorClient
-API = "https://personal-shopper-13.preview.emergentagent.com/api"
+API = "https://pdf-horizontal-fix.preview.emergentagent.com/api"
 
 async def main():
     db = AsyncIOMotorClient(os.environ['MONGO_URL'])[os.environ['DB_NAME']]
