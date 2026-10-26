@@ -12,6 +12,7 @@ import ClientDashboard from "@/pages/ClientDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
 import AdminLive from "@/pages/AdminLive";
 import AdminLiveModule from "@/pages/AdminLiveModule";
+import AdminAccounting from "@/pages/AdminAccounting";
 import AdminClients from "@/pages/AdminClients";
 import AdminWallet from "@/pages/AdminWallet";
 import AdminShipments from "@/pages/AdminShipments";
@@ -215,6 +216,7 @@ function App() {
           <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/live" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminLive /></ProtectedRoute>} />
           <Route path="/admin/live-module" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminLiveModule /></ProtectedRoute>} />
+          <Route path="/admin/accounting" element={<ProtectedRoute allowedRoles={["admin"]}><AdminAccounting /></ProtectedRoute>} />
           <Route path="/admin/clients" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminClients /></ProtectedRoute>} />
           <Route path="/admin/wallet" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminWallet /></ProtectedRoute>} />
           <Route path="/admin/shipments" element={<ProtectedRoute allowedRoles={["admin", "employee"]}><AdminShipments /></ProtectedRoute>} />

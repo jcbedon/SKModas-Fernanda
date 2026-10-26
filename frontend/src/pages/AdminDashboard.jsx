@@ -29,7 +29,8 @@ import {
   ShoppingBag,
   Landmark,
   Video,
-  Boxes
+  Boxes,
+  Calculator,
 } from "lucide-react";
 import { uploadTenantLogo } from "@/lib/api";
 import { useRefreshOnTabFocus } from "@/hooks/useRefreshOnTabFocus";
@@ -211,6 +212,7 @@ export default function AdminDashboard() {
       { icon: Gift, label: "Referidos", path: "/admin/referrals", color: "#27ae60", description: "Configurar bonos", permission: "manage_referrals" },
       { icon: BarChart3, label: "Reportes", path: "/admin/reports", color: "#2a4f7f", description: "Ver estadísticas", permission: "view_reports" },
       { icon: TrendingUp, label: "Estadisticas", path: "/admin/stats", color: "#E74C3C", description: "Ver ganancias del negocio", permission: "view_statistics" },
+      ...(user?.accounting_enabled && user?.role === "admin" ? [{ icon: Calculator, label: "Contabilidad", path: "/admin/accounting", color: "#059669", description: "Gastos y balance neto" }] : []),
       { icon: Landmark, label: "Cuentas", path: "/admin/bank-accounts", color: "#4F46E5", description: "Banca y movimientos", permission: "manage_bank_accounts" },
       { icon: UserCog, label: "Empleados", path: "/admin/employees", color: "#8E44AD", description: "Gestionar empleados y permisos", permission: "manage_employees" },
       { icon: ClipboardList, label: "Auditoría", path: "/admin/audit", color: "#34495E", description: "Registro de acciones", permission: "view_audit" },

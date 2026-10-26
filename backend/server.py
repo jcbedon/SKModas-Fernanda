@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 import object_store
 import uuid
+import re
 from datetime import datetime, timezone, timedelta
 import random
 import string
@@ -246,6 +247,7 @@ class Tenant(BaseModel):
     tracking_url_template: Optional[str] = None  # URL template with {tracking} placeholder
     # Live module (fast product entry) — opt-in per tenant, controlled by superadmin.
     live_module_enabled: bool = False
+    accounting_enabled: bool = False
     # Invoice settings
     invoice_show_tax_per_item: bool = True  # Show tax column in product table
     invoice_show_tax_summary: bool = True   # Show tax total at the bottom
@@ -1340,7 +1342,7 @@ async def auth_me(current_user: dict = Depends(get_current_user)):
     tenant_logo = None
     tenant_slug = None
     if profile.get("tenant_id"):
-        tenant = await db.tenants.find_one({"id": profile["tenant_id"]}, {"_id": 0, "business_name": 1, "logo_url": 1, "slug": 1, "dashboard_banner_url": 1, "live_module_enabled": 1})
+        tenant = await db.tenants.find_one({"id": profile["tenant_id"]}, {"_id": 0, "business_name": 1, "logo_url": 1, "slug": 1, "dashboard_banner_url": 1, "live_module_enabled": 1, "accounting_enabled": 1})
         if tenant:
             tenant_name = tenant.get("business_name")
             tenant_logo = tenant.get("logo_url")
@@ -1355,6 +1357,7 @@ async def auth_me(current_user: dict = Depends(get_current_user)):
         "tenant_slug": tenant_slug,
         "tenant_banner": (tenant or {}).get("dashboard_banner_url") if profile.get("tenant_id") else None,
         "live_module_enabled": bool((tenant or {}).get("live_module_enabled")) if profile.get("tenant_id") else False,
+        "accounting_enabled": bool((tenant or {}).get("accounting_enabled")) if profile.get("tenant_id") else False,
         "permissions": profile.get("permissions") or {},
         "customer_id": profile.get("customer_id"),
         "email": profile.get("email"),
@@ -2656,6 +2659,8 @@ async def update_tenant_settings(tenant_id: str, data: dict, current_user: dict 
     # Live fast-entry module (opt-in per tenant)
     if "live_module_enabled" in data:
         update_fields["live_module_enabled"] = bool(data["live_module_enabled"])
+    if "accounting_enabled" in data:
+        update_fields["accounting_enabled"] = bool(data["accounting_enabled"])
 
     # Late Fee settings
     if "late_fee_enabled" in data:
@@ -12319,6 +12324,235 @@ async def cleanup_database(user=Depends(get_current_user)):
         "message": "Base de datos limpiada exitosamente",
         "total_deleted": total_deleted,
         "details": results
+    }
+
+
+
+# ==================== ACCOUNTING (Contabilidad, opt-in per tenant) ====================
+DEFAULT_EXPENSE_CATEGORIES = [
+    {"key": "empleados", "label": "Pago a empleados", "color": "#6366f1", "icon": "users"},
+    {"key": "paqueteria", "label": "Envíos / Paquetería", "color": "#0ea5e9", "icon": "truck"},
+    {"key": "publicidad", "label": "Publicidad", "color": "#ec4899", "icon": "megaphone"},
+    {"key": "empaques", "label": "Empaques", "color": "#f59e0b", "icon": "package"},
+    {"key": "servicios", "label": "Servicios (luz, internet)", "color": "#14b8a6", "icon": "zap"},
+    {"key": "arriendo", "label": "Arriendo", "color": "#8b5cf6", "icon": "home"},
+    {"key": "transporte", "label": "Transporte", "color": "#f97316", "icon": "car"},
+    {"key": "otros", "label": "Otros", "color": "#64748b", "icon": "tag"},
+]
+
+
+async def _accounting_tenant(current_user: dict) -> dict:
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Solo el administrador")
+    tenant = await db.tenants.find_one({"id": current_user["tenant_id"]}, {"_id": 0, "accounting_enabled": 1, "accounting_categories": 1, "bank_accounts": 1})
+    if not tenant or not tenant.get("accounting_enabled"):
+        raise HTTPException(status_code=403, detail="El módulo de Contabilidad no está activado")
+    return tenant
+
+
+def _expense_categories(tenant: dict) -> list:
+    return tenant.get("accounting_categories") or DEFAULT_EXPENSE_CATEGORIES
+
+
+async def _sync_expense_ledger(tid: str, expense: dict, actor: dict):
+    """Keep exactly one withdrawal row in Cuentas for an expense paid from a bank account."""
+    key = {"tenant_id": tid, "kind": "withdrawal", "source_expense_id": expense["id"]}
+    if not expense.get("bank_account_id") or expense.get("is_deleted"):
+        await db.bank_transactions.update_many({**key, "is_deleted": {"$ne": True}}, {"$set": {
+            "is_deleted": True, "deleted_at": datetime.now(timezone.utc).isoformat(), "deleted_by": actor["user_id"], "deleted_reason": "Gasto eliminado o sin cuenta"}})
+        return
+    await db.bank_transactions.update_one(key, {
+        "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": f"{expense['date']}T12:00:00+00:00"},
+        "$set": {"bank_account_id": expense["bank_account_id"], "amount": expense["amount"],
+                 "description": f"Gasto: {expense.get('category_label', '')} — {expense.get('description', '')}".strip(" —"),
+                 "source_transaction_id": None, "customer_id": None, "customer_name": None,
+                 "reference_number": None, "created_by": actor["user_id"], "created_by_name": expense.get("created_by_name"),
+                 "is_deleted": False},
+    }, upsert=True)
+
+
+@api_router.get("/accounting/categories")
+async def get_accounting_categories(current_user: dict = Depends(get_current_user)):
+    tenant = await _accounting_tenant(current_user)
+    return {"categories": _expense_categories(tenant)}
+
+
+@api_router.put("/accounting/categories")
+async def update_accounting_categories(data: dict, current_user: dict = Depends(get_current_user)):
+    await _accounting_tenant(current_user)
+    cats = []
+    for c in data.get("categories") or []:
+        label = str(c.get("label") or "").strip()
+        if not label:
+            continue
+        key = str(c.get("key") or "").strip() or re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or str(uuid.uuid4())[:8]
+        cats.append({"key": key, "label": label[:40], "color": c.get("color") or "#64748b", "icon": c.get("icon") or "tag"})
+    if not cats:
+        raise HTTPException(status_code=400, detail="Debe existir al menos una categoría")
+    await db.tenants.update_one({"id": current_user["tenant_id"]}, {"$set": {"accounting_categories": cats}})
+    return {"categories": cats}
+
+
+@api_router.get("/accounting/expenses")
+async def list_expenses(start_day: str, end_day: str, current_user: dict = Depends(get_current_user)):
+    await _accounting_tenant(current_user)
+    rows = await db.expenses.find(
+        {"tenant_id": current_user["tenant_id"], "is_deleted": {"$ne": True}, "date": {"$gte": start_day, "$lte": end_day}},
+        {"_id": 0}).sort([("date", -1), ("created_at", -1)]).to_list(5000)
+    return {"expenses": rows}
+
+
+async def _validated_expense_fields(tenant: dict, amount, category: str, date: str, bank_account_id: Optional[str]):
+    try:
+        amount = round(float(amount), 2)
+    except (TypeError, ValueError):
+        amount = 0
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="El monto debe ser mayor a 0")
+    cat = next((c for c in _expense_categories(tenant) if c["key"] == category), None)
+    if not cat:
+        raise HTTPException(status_code=400, detail="Categoría no válida")
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Fecha no válida")
+    bank_account_id = (bank_account_id or "").strip() or None
+    if bank_account_id and not any(a.get("id") == bank_account_id for a in tenant.get("bank_accounts") or []):
+        raise HTTPException(status_code=400, detail="Cuenta bancaria no encontrada")
+    return amount, cat, bank_account_id
+
+
+@api_router.post("/accounting/expenses")
+async def create_expense(
+    amount: float = FastAPIForm(...), category: str = FastAPIForm(...), date: str = FastAPIForm(...),
+    description: str = FastAPIForm(""), bank_account_id: str = FastAPIForm(None),
+    receipt: Optional[UploadFile] = File(None), current_user: dict = Depends(get_current_user),
+):
+    tenant = await _accounting_tenant(current_user)
+    tid = current_user["tenant_id"]
+    amount, cat, bank_account_id = await _validated_expense_fields(tenant, amount, category, date, bank_account_id)
+    receipt_url = None
+    if receipt is not None and receipt.filename:
+        ext = receipt.filename.rsplit(".", 1)[-1].lower() if "." in receipt.filename else ""
+        if ext not in ("jpg", "jpeg", "png", "webp", "heic", "pdf"):
+            raise HTTPException(status_code=400, detail="Formato no soportado. Usa jpg, png, webp o pdf")
+        data = await receipt.read()
+        if len(data) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="El archivo supera 10 MB")
+        receipt_url = f"/api/uploads/{object_store.upload_file(data, f'expense_{uuid.uuid4().hex[:8]}.{ext}', 'expenses')}"
+    actor_name = await get_actor_name(current_user["user_id"])
+    expense = {
+        "id": str(uuid.uuid4()), "tenant_id": tid, "amount": amount, "category": cat["key"], "category_label": cat["label"],
+        "description": description.strip()[:200], "date": date, "bank_account_id": bank_account_id, "receipt_url": receipt_url,
+        "created_by": current_user["user_id"], "created_by_name": actor_name, "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.expenses.insert_one(dict(expense))
+    await _sync_expense_ledger(tid, expense, current_user)
+    await log_audit_action(tenant_id=tid, user_id=current_user["user_id"], user_name=actor_name, user_role="admin",
+                           action="expense_created", entity_type="expense", entity_id=expense["id"],
+                           entity_name=f"${amount:.2f} · {cat['label']}", details={"expense": expense})
+    return {"expense": expense}
+
+
+@api_router.put("/accounting/expenses/{expense_id}")
+async def update_expense(expense_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    tenant = await _accounting_tenant(current_user)
+    tid = current_user["tenant_id"]
+    old = await db.expenses.find_one({"id": expense_id, "tenant_id": tid, "is_deleted": {"$ne": True}}, {"_id": 0})
+    if not old:
+        raise HTTPException(status_code=404, detail="Gasto no encontrado")
+    amount, cat, bank_account_id = await _validated_expense_fields(
+        tenant, data.get("amount", old["amount"]), data.get("category", old["category"]),
+        data.get("date", old["date"]), data.get("bank_account_id", old.get("bank_account_id")))
+    updates = {"amount": amount, "category": cat["key"], "category_label": cat["label"], "date": data.get("date", old["date"]),
+               "description": str(data.get("description", old.get("description", ""))).strip()[:200], "bank_account_id": bank_account_id,
+               "updated_at": datetime.now(timezone.utc).isoformat()}
+    await db.expenses.update_one({"id": expense_id, "tenant_id": tid}, {"$set": updates})
+    expense = {**old, **updates}
+    await _sync_expense_ledger(tid, expense, current_user)
+    await log_audit_action(tenant_id=tid, user_id=current_user["user_id"], user_name=await get_actor_name(current_user["user_id"]),
+                           user_role="admin", action="expense_updated", entity_type="expense", entity_id=expense_id,
+                           entity_name=f"${amount:.2f} · {cat['label']}", details={"before": old, "after": expense})
+    return {"expense": expense}
+
+
+@api_router.delete("/accounting/expenses/{expense_id}")
+async def delete_expense(expense_id: str, current_user: dict = Depends(get_current_user)):
+    await _accounting_tenant(current_user)
+    tid = current_user["tenant_id"]
+    old = await db.expenses.find_one({"id": expense_id, "tenant_id": tid, "is_deleted": {"$ne": True}}, {"_id": 0})
+    if not old:
+        raise HTTPException(status_code=404, detail="Gasto no encontrado")
+    await db.expenses.update_one({"id": expense_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc).isoformat(), "deleted_by": current_user["user_id"]}})
+    await _sync_expense_ledger(tid, {**old, "is_deleted": True}, current_user)
+    await log_audit_action(tenant_id=tid, user_id=current_user["user_id"], user_name=await get_actor_name(current_user["user_id"]),
+                           user_role="admin", action="expense_deleted", entity_type="expense", entity_id=expense_id,
+                           entity_name=f"${old['amount']:.2f} · {old.get('category_label', '')}", details={"expense": old})
+    return {"message": "Gasto eliminado"}
+
+
+@api_router.get("/accounting/summary")
+async def accounting_summary(start: str, end: str, start_day: str, end_day: str, bucket: str = "day",
+                             tz_offset_minutes: int = 0, current_user: dict = Depends(get_current_user)):
+    """Income (profits the system already computes) − expenses = net balance, with chart buckets.
+    start/end: ISO instants for system income; start_day/end_day: local dates for expenses; tz_offset_minutes = JS getTimezoneOffset()."""
+    tenant = await _accounting_tenant(current_user)
+    tid = current_user["tenant_id"]
+    rng = {"$gte": start, "$lte": end}
+    offset = timedelta(minutes=-tz_offset_minutes)
+    cut = 7 if bucket == "month" else 10
+
+    def bkey(iso: str) -> str:
+        try:
+            return (datetime.fromisoformat(iso.replace("Z", "+00:00")) + offset).strftime("%Y-%m-%d")[:cut]
+        except (ValueError, AttributeError):
+            return (iso or "")[:cut]
+
+    series = {}
+
+    def add(key, field, amount):
+        b = series.setdefault(key, {"key": key, "income": 0.0, "expenses": 0.0})
+        b[field] += amount
+
+    purchases = await db.purchases.find({"tenant_id": tid, "created_at": rng, "entry_source": {"$ne": "paca"}},
+                                        {"_id": 0, "commission": 1, "created_at": 1}).to_list(None)
+    product_comm = 0.0
+    for p in purchases:
+        v = float(p.get("commission") or 0)
+        product_comm += v
+        add(bkey(p.get("created_at")), "income", v)
+    lives = await db.lives.find({"tenant_id": tid, "created_at": rng}, {"_id": 0, "manual_commission": 1, "store_invoice_tax": 1, "created_at": 1}).to_list(None)
+    manual_comm = store_tax = 0.0
+    for lv in lives:
+        m, t = float(lv.get("manual_commission") or 0), float(lv.get("store_invoice_tax") or 0)
+        manual_comm += m
+        store_tax += t
+        add(bkey(lv.get("created_at")), "income", m - t)
+    pacas = await db.paca_sales.find({"tenant_id": tid, "created_at": rng}, {"_id": 0, "commission": 1, "created_at": 1}).to_list(None)
+    paca_comm = 0.0
+    for ps in pacas:
+        v = float(ps.get("commission") or 0)
+        paca_comm += v
+        add(bkey(ps.get("created_at")), "income", v)
+
+    expenses = await db.expenses.find({"tenant_id": tid, "is_deleted": {"$ne": True}, "date": {"$gte": start_day, "$lte": end_day}},
+                                      {"_id": 0, "amount": 1, "category": 1, "date": 1}).to_list(None)
+    cats = {c["key"]: c for c in _expense_categories(tenant)}
+    by_cat = {}
+    for e in expenses:
+        add(e["date"][:cut], "expenses", e["amount"])
+        by_cat[e["category"]] = by_cat.get(e["category"], 0) + e["amount"]
+    income = product_comm + manual_comm + paca_comm - store_tax
+    total_exp = sum(by_cat.values())
+    return {
+        "income": {"total": round(income, 2), "product_commissions": round(product_comm, 2), "manual_commissions": round(manual_comm, 2),
+                   "pacas_commissions": round(paca_comm, 2), "store_invoice_taxes": round(store_tax, 2)},
+        "expenses_total": round(total_exp, 2),
+        "net": round(income - total_exp, 2),
+        "by_category": sorted([{"key": k, "label": cats.get(k, {}).get("label", k), "color": cats.get(k, {}).get("color", "#64748b"),
+                                "amount": round(v, 2)} for k, v in by_cat.items()], key=lambda x: -x["amount"]),
+        "series": [{**b, "income": round(b["income"], 2), "expenses": round(b["expenses"], 2), "net": round(b["income"] - b["expenses"], 2)}
+                   for _, b in sorted(series.items())],
     }
 
 

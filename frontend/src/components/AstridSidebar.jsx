@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/App";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
+  Calculator,
   LayoutDashboard,
   Radio,
   Users,
@@ -50,10 +51,12 @@ const ROUTE_TITLES = ADMIN_NAV.reduce((acc, n) => {
   return acc;
 }, {});
 ROUTE_TITLES["/admin/live-module"] = "Live";
+ROUTE_TITLES["/admin/accounting"] = "Contabilidad";
 
 // Red-accented "Live" fast-entry module, inserted right after Live Shopping
 // but only for tenants that have the module enabled.
 const LIVE_MODULE_ITEM = { to: "/admin/live-module", label: "Live", icon: Video, iconColor: "#E11D48" };
+const ACCOUNTING_ITEM = { to: "/admin/accounting", label: "Contabilidad", icon: Calculator, iconColor: "#059669" };
 
 /**
  * Fixed left sidebar (desktop) + compact back-button header (mobile) shown on
@@ -84,9 +87,13 @@ export const AstridSidebar = () => {
   const currentTitle = ROUTE_TITLES[location.pathname] || "Astrid Shop";
 
   // Inject the Live module link (after Live Shopping) only when enabled for the tenant.
-  const navItems = user?.live_module_enabled
+  const baseNav = user?.live_module_enabled
     ? [ADMIN_NAV[0], ADMIN_NAV[1], LIVE_MODULE_ITEM, ...ADMIN_NAV.slice(2)]
     : ADMIN_NAV;
+  // Contabilidad (admin only, opt-in per tenant) goes right after Cuentas.
+  const navItems = user?.accounting_enabled && user?.role === "admin"
+    ? baseNav.flatMap((n) => (n.to === "/admin/bank-accounts" ? [n, ACCOUNTING_ITEM] : [n]))
+    : baseNav;
 
   const isActive = (item) =>
     item.exact ? location.pathname === item.to : location.pathname.startsWith(item.to);

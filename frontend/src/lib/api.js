@@ -300,3 +300,10 @@ export const getPacaStats = (period = "week") => api.get("/pacas/stats", { param
 export default api;
 export const getDuplicateRecharges = () => api.get("/admin/bank-accounts/duplicate-recharges");
 export const fixDuplicateRecharges = () => api.post("/admin/bank-accounts/duplicate-recharges/fix");
+export const getAccountingSummary = (params) => api.get("/accounting/summary", { params });
+export const getExpenses = (params) => api.get("/accounting/expenses", { params });
+export const createExpense = (formData) => api.post("/accounting/expenses", formData, { headers: { "Content-Type": "multipart/form-data" } });
+export const updateExpense = (id, data) => api.put(`/accounting/expenses/${id}`, data);
+export const deleteExpense = (id) => api.delete(`/accounting/expenses/${id}`);
+export const getExpenseCategories = () => api.get("/accounting/categories");
+export const updateExpenseCategories = (categories) => api.put("/accounting/categories", { categories });

@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Building, Users, Shield, Plus, LogOut, Power, UserPlus, Percent, X, Link, Truck, Key, Eye, EyeOff, FileText, Package, DollarSign, Landmark, Trash2, Image as ImageIcon, Upload, Video } from "lucide-react";
+import { Building, Users, Shield, Plus, LogOut, Power, UserPlus, Percent, X, Link, Truck, Key, Eye, EyeOff, FileText, Package, DollarSign, Landmark, Trash2, Image as ImageIcon, Upload, Video, Calculator } from "lucide-react";
 
 export default function SuperadminDashboard() {
   const { user, logout } = useAuth();
@@ -435,6 +435,18 @@ export default function SuperadminDashboard() {
     }
   };
 
+  const handleToggleAccounting = async (tenant) => {
+    const next = !tenant.accounting_enabled;
+    setTenants(prev => prev.map(t => t.id === tenant.id ? { ...t, accounting_enabled: next } : t));
+    try {
+      await updateTenantSettings(tenant.id, { accounting_enabled: next });
+      toast.success(next ? "Contabilidad ACTIVADA" : "Contabilidad desactivada");
+    } catch (error) {
+      setTenants(prev => prev.map(t => t.id === tenant.id ? { ...t, accounting_enabled: !next } : t));
+      toast.error("No se pudo actualizar Contabilidad");
+    }
+  };
+
   // One-click toggle of the Live module directly from the tenant card.
   const handleToggleLiveModule = async (tenant) => {
     const next = !tenant.live_module_enabled;
@@ -629,6 +641,15 @@ export default function SuperadminDashboard() {
                         >
                           <Video className="h-4 w-4 mr-1" />
                           Live: {tenant.live_module_enabled ? "ON" : "OFF"}
+                        </Button>
+                        <Button
+                          variant="outline" size="sm"
+                          className={`rounded-lg ${tenant.accounting_enabled ? "border-emerald-300 text-white bg-emerald-600 hover:bg-emerald-700" : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"}`}
+                          onClick={() => handleToggleAccounting(tenant)}
+                          data-testid={`toggle-accounting-${tenant.id}`}
+                        >
+                          <Calculator className="h-4 w-4 mr-1" />
+                          Contabilidad: {tenant.accounting_enabled ? "ON" : "OFF"}
                         </Button>
                         <Button
                           variant="outline" size="sm"
