@@ -103,7 +103,7 @@ export const ExpenseFormDialog = ({ open, onOpenChange, categories, accounts, ed
             <div className={`rounded-2xl border p-3 transition-colors duration-150 ${form.repeat ? "border-indigo-200 bg-indigo-50" : "border-slate-100"}`} data-testid="expense-repeat-box">
               <label className="flex items-center justify-between cursor-pointer">
                 <span className="flex items-center gap-2 text-sm font-medium text-slate-700"><Repeat className="h-4 w-4 text-indigo-500" />Repetir cada mes (gasto fijo)</span>
-                <Switch checked={form.repeat} onCheckedChange={(v) => setForm((f) => ({ ...f, repeat: v, day: f.day || String(Number(f.date.slice(8, 10))) }))} data-testid="expense-repeat-switch" />
+                <Switch className="data-[state=checked]:bg-indigo-500 data-[state=unchecked]:bg-slate-300" checked={form.repeat} onCheckedChange={(v) => setForm((f) => ({ ...f, repeat: v, day: f.day || String(Number(f.date.slice(8, 10))) }))} data-testid="expense-repeat-switch" />
               </label>
               {form.repeat && (
                 <div className="flex items-center gap-2 mt-3 text-sm text-slate-600">

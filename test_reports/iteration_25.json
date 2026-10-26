@@ -1,0 +1,27 @@
+{
+  "summary": "Frontend E2E of the 'Gastos Recurrentes' (fixed monthly expenses) feature on /admin/accounting, run as test@preview.com. The preview clock reads 2026-10-26. All 7 requested flows PASSED. (1) The repeat switch shows the day input, pre-filled with the expense date's day (15). (2) A $500 expense dated 2026-08-15 from Banco Guayaquil was registered normally: it appears in August and Guayaquil dropped 1287.13 -> 787.13. One fixed expense was created. (3) After a reload the amber pending box showed 2 rows (due 2026-09-15 and 2026-10-15). October Gastos ($0) and Balance neto ($454.42) did not change. (4) I confirmed the Sep row with the amount changed to 480 and the account changed to Produbanco. It left the pending box and appeared in September's list with the Produbanco label. September Gastos became $480 and net went from $97.82 to -$382.18. Produbanco dropped 581.15 -> 101.15 and Guayaquil did not change. (5) Discarding the Oct row (window.confirm) removed it, and it did not come back after a reload, nor after pausing and reactivating the fixed expense. (6) In the Gastos fijos dialog, the save button only appears after an edit. Saving amount 520 / day 20 persisted and the save button then hid. Pause shows PAUSADO and the switch unchecked; reactivating works. Stopping a second fixed expense (cash, 2026-07-31, day 31) removed it from the list, and its 2 pending rows also disappeared. Those rows were due 2026-08-31 and 2026-09-30, which confirms the last-day-of-month rule. (7) Regression: a normal expense create ($25, Produbanco), edit to $30 and delete all work, and the repeat box is hidden in edit mode. Cleanup: all TEST_ expenses deleted and fixed expenses stopped. Bank balances are back to baseline (2072.55 / 557.35 / 1287.13 / 581.15). Recurring list and pending list are empty.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Nuevo gasto dialog + Gastos fijos dialog (shadcn Switch)", "issues": ["Switch ON (checked) looks almost white/transparent, while OFF (unchecked) looks darker grey. Users may read an active fixed expense as off and a paused one as on. Root cause: index.css line 8 sets `--primary: #1E3A5F` (hex) in an unlayered :root. That overrides the HSL `--primary: 213 52% 24%` inside @layer base, so Tailwind's `hsl(var(--primary))` becomes invalid and bg-primary renders transparent. This is global and likely affects every `bg-primary`/`text-primary` shadcn usage. Fix: rename the hex brand vars (e.g. --brand-primary) or set the switch to checked:bg-indigo-500/emerald-500."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix the low-contrast Switch checked state: --primary hex vs HSL var conflict in frontend/src/index.css (line 8 vs line 121)."
+  ],
+  "critical_code_review_comments": [
+    "Editing a fixed expense's amount, day or account in RecurringManager does not update pending rows that already exist; only future generations use the new values. Consider updating existing pending docs or telling the user.",
+    "Reactivating a paused fixed expense sets start_month to the current month. If the payment day has already passed this month, a pending row appears immediately. This is probably fine, but the UI does not explain it.",
+    "RecurringManager has no UI to change the category, description or bank account of a fixed expense (the backend supports it).",
+    "The backend generates pending rows only when the expenses list is loaded (GET /accounting/expenses with today=). Pending rows do not appear until someone opens Contabilidad. This is acceptable for an MVP."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend only)", "frontend": "100% (7/7 flows)"},
+  "seed_data_creation": "None. All TEST_ expenses and fixed expenses were created and then cleaned up.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The preview clock is 2026-10-26 UTC. Login inputs are duplicated in the DOM, so use the ':visible' selector. Baseline bank balances: Pichincha·5633 2072.55, Pichincha·7891 557.35, Guayaquil·1278 1287.13, Produbanco·9443 581.15. Category index 0 = empleados, 6 = Transporte. The pending-account select is a native select (labels like 'Produbanco · 9443'). The form account select is a shadcn Select (role=option). Python Playwright dialog handler needs `import asyncio`."
+}

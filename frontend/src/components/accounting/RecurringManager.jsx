@@ -21,7 +21,7 @@ const Row = ({ r, cat, account, onChanged }) => {
           <p className="text-sm font-semibold truncate">{r.description || r.category_label}</p>
           <p className="text-xs text-slate-400 truncate">{r.category_label}{account ? ` · ${account.bank_name}` : " · Efectivo"}{r.active ? "" : " · PAUSADO"}</p>
         </div>
-        <Switch checked={r.active} onCheckedChange={(v) => call(() => updateRecurringExpense(r.id, { active: v }), v ? "Gasto fijo reactivado" : "Gasto fijo pausado")} data-testid={`recurring-active-${r.id}`} />
+        <Switch className="data-[state=checked]:bg-emerald-500 data-[state=unchecked]:bg-slate-300" checked={r.active} onCheckedChange={(v) => call(() => updateRecurringExpense(r.id, { active: v }), v ? "Gasto fijo reactivado" : "Gasto fijo pausado")} data-testid={`recurring-active-${r.id}`} />
       </div>
       <div className="flex items-center gap-2 text-xs text-slate-500">
         $<Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} onWheel={(e) => e.target.blur()} className="h-8 w-24 rounded-lg" data-testid={`recurring-amount-${r.id}`} />
