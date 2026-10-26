@@ -12357,7 +12357,7 @@ def _expense_categories(tenant: dict) -> list:
 async def _sync_expense_ledger(tid: str, expense: dict, actor: dict):
     """Keep exactly one withdrawal row in Cuentas for an expense paid from a bank account."""
     key = {"tenant_id": tid, "kind": "withdrawal", "source_expense_id": expense["id"]}
-    if not expense.get("bank_account_id") or expense.get("is_deleted"):
+    if not expense.get("bank_account_id") or expense.get("is_deleted") or expense.get("status") == "pending":
         await db.bank_transactions.update_many({**key, "is_deleted": {"$ne": True}}, {"$set": {
             "is_deleted": True, "deleted_at": datetime.now(timezone.utc).isoformat(), "deleted_by": actor["user_id"], "deleted_reason": "Gasto eliminado o sin cuenta"}})
         return
@@ -12396,12 +12396,122 @@ async def update_accounting_categories(data: dict, current_user: dict = Depends(
 
 
 @api_router.get("/accounting/expenses")
-async def list_expenses(start_day: str, end_day: str, current_user: dict = Depends(get_current_user)):
+async def list_expenses(start_day: str, end_day: str, today: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     await _accounting_tenant(current_user)
+    tid = current_user["tenant_id"]
+    await _generate_recurring_expenses(tid, today or datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     rows = await db.expenses.find(
-        {"tenant_id": current_user["tenant_id"], "is_deleted": {"$ne": True}, "date": {"$gte": start_day, "$lte": end_day}},
+        {"tenant_id": tid, "is_deleted": {"$ne": True}, "status": {"$ne": "pending"}, "date": {"$gte": start_day, "$lte": end_day}},
         {"_id": 0}).sort([("date", -1), ("created_at", -1)]).to_list(5000)
-    return {"expenses": rows}
+    pending = await db.expenses.find({"tenant_id": tid, "is_deleted": {"$ne": True}, "status": "pending"}, {"_id": 0}).sort("date", 1).to_list(500)
+    return {"expenses": rows, "pending": pending}
+
+
+def _month_day(period: str, day: int) -> str:
+    y, m = map(int, period.split("-"))
+    last = (datetime(y + (m == 12), m % 12 + 1, 1) - timedelta(days=1)).day
+    return f"{period}-{min(day, last):02d}"
+
+
+def _next_period(period: str) -> str:
+    y, m = map(int, period.split("-"))
+    return f"{y + (m == 12)}-{m % 12 + 1:02d}"
+
+
+async def _generate_recurring_expenses(tid: str, today: str):
+    """Create one PENDING expense per active fixed expense and month whose payment day has arrived (idempotent)."""
+    templates = await db.recurring_expenses.find({"tenant_id": tid, "active": True, "is_deleted": {"$ne": True}}, {"_id": 0}).to_list(500)
+    for t in templates:
+        period = t["start_month"]
+        while period <= today[:7]:
+            date = _month_day(period, t["day_of_month"])
+            if date <= today:
+                await db.expenses.update_one(
+                    {"tenant_id": tid, "recurring_id": t["id"], "period": period},
+                    {"$setOnInsert": {
+                        "id": str(uuid.uuid4()), "tenant_id": tid, "recurring_id": t["id"], "period": period, "status": "pending",
+                        "amount": t["amount"], "category": t["category"], "category_label": t["category_label"],
+                        "description": t.get("description", ""), "date": date, "bank_account_id": t.get("bank_account_id"),
+                        "receipt_url": None, "created_by": t.get("created_by"), "created_by_name": "Gasto fijo",
+                        "created_at": datetime.now(timezone.utc).isoformat()}},
+                    upsert=True)
+            period = _next_period(period)
+
+
+class RecurringExpenseIn(BaseModel):
+    amount: Optional[float] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    bank_account_id: Optional[str] = None
+    day_of_month: Optional[int] = None
+    active: Optional[bool] = None
+
+
+@api_router.get("/accounting/recurring")
+async def list_recurring(current_user: dict = Depends(get_current_user)):
+    await _accounting_tenant(current_user)
+    rows = await db.recurring_expenses.find({"tenant_id": current_user["tenant_id"], "is_deleted": {"$ne": True}}, {"_id": 0}).sort("day_of_month", 1).to_list(500)
+    return {"recurring": rows}
+
+
+@api_router.put("/accounting/recurring/{rid}")
+async def update_recurring(rid: str, data: RecurringExpenseIn, current_user: dict = Depends(get_current_user)):
+    tenant = await _accounting_tenant(current_user)
+    tid = current_user["tenant_id"]
+    old = await db.recurring_expenses.find_one({"id": rid, "tenant_id": tid, "is_deleted": {"$ne": True}}, {"_id": 0})
+    if not old:
+        raise HTTPException(status_code=404, detail="Gasto fijo no encontrado")
+    amount, cat, bank = await _validated_expense_fields(
+        tenant, data.amount if data.amount is not None else old["amount"], data.category or old["category"],
+        "2000-01-01", data.bank_account_id if data.bank_account_id is not None else old.get("bank_account_id"), keep=old)
+    day = data.day_of_month if data.day_of_month is not None else old["day_of_month"]
+    if not 1 <= day <= 31:
+        raise HTTPException(status_code=400, detail="El día de pago debe estar entre 1 y 31")
+    updates = {"amount": amount, "category": cat["key"], "category_label": cat["label"], "bank_account_id": bank, "day_of_month": day,
+               "description": (data.description if data.description is not None else old.get("description", "")).strip()[:200],
+               "active": old["active"] if data.active is None else data.active, "updated_at": datetime.now(timezone.utc).isoformat()}
+    if updates["active"] and not old["active"]:
+        updates["start_month"] = max(old["start_month"], datetime.now(timezone.utc).strftime("%Y-%m"))  # no back-fill for paused months
+    await db.recurring_expenses.update_one({"id": rid}, {"$set": updates})
+    await log_audit_action(tenant_id=tid, user_id=current_user["user_id"], user_name=await get_actor_name(current_user["user_id"]), user_role="admin",
+                           action="recurring_expense_updated", entity_type="recurring_expense", entity_id=rid,
+                           entity_name=f"${amount:.2f} · {cat['label']}", details={"before": old, "after": updates})
+    return {"recurring": {**old, **updates}}
+
+
+@api_router.delete("/accounting/recurring/{rid}")
+async def delete_recurring(rid: str, current_user: dict = Depends(get_current_user)):
+    await _accounting_tenant(current_user)
+    tid = current_user["tenant_id"]
+    res = await db.recurring_expenses.update_one({"id": rid, "tenant_id": tid}, {"$set": {"is_deleted": True, "active": False}})
+    if not res.matched_count:
+        raise HTTPException(status_code=404, detail="Gasto fijo no encontrado")
+    # Unconfirmed occurrences go away; confirmed ones stay as history.
+    await db.expenses.update_many({"tenant_id": tid, "recurring_id": rid, "status": "pending"}, {"$set": {"is_deleted": True}})
+    await log_audit_action(tenant_id=tid, user_id=current_user["user_id"], user_name=await get_actor_name(current_user["user_id"]), user_role="admin",
+                           action="recurring_expense_deleted", entity_type="recurring_expense", entity_id=rid, entity_name="Gasto fijo eliminado", details={})
+    return {"message": "Gasto fijo eliminado"}
+
+
+@api_router.post("/accounting/expenses/{expense_id}/confirm")
+async def confirm_expense(expense_id: str, data: dict, current_user: dict = Depends(get_current_user)):
+    tenant = await _accounting_tenant(current_user)
+    tid = current_user["tenant_id"]
+    exp = await db.expenses.find_one({"id": expense_id, "tenant_id": tid, "status": "pending", "is_deleted": {"$ne": True}}, {"_id": 0})
+    if not exp:
+        raise HTTPException(status_code=404, detail="Gasto pendiente no encontrado")
+    amount, _, bank = await _validated_expense_fields(tenant, data.get("amount", exp["amount"]), exp["category"], exp["date"],
+                                                      data.get("bank_account_id", exp.get("bank_account_id")), keep=exp)
+    claim = await db.expenses.update_one({"id": expense_id, "status": "pending"}, {"$set": {
+        "status": "confirmed", "amount": amount, "bank_account_id": bank, "confirmed_at": datetime.now(timezone.utc).isoformat()}})
+    if not claim.modified_count:
+        raise HTTPException(status_code=400, detail="Este gasto ya fue confirmado")
+    expense = {**exp, "status": "confirmed", "amount": amount, "bank_account_id": bank}
+    await _sync_expense_ledger(tid, expense, current_user)
+    await log_audit_action(tenant_id=tid, user_id=current_user["user_id"], user_name=await get_actor_name(current_user["user_id"]), user_role="admin",
+                           action="expense_created", entity_type="expense", entity_id=expense_id,
+                           entity_name=f"${amount:.2f} · {exp.get('category_label', '')} (gasto fijo confirmado)", details={"expense": expense})
+    return {"expense": expense}
 
 
 async def _validated_expense_fields(tenant: dict, amount, category: str, date: str, bank_account_id: Optional[str], keep: dict = None):
@@ -12430,6 +12540,7 @@ async def _validated_expense_fields(tenant: dict, amount, category: str, date: s
 async def create_expense(
     amount: float = FastAPIForm(...), category: str = FastAPIForm(...), date: str = FastAPIForm(...),
     description: str = FastAPIForm(""), bank_account_id: str = FastAPIForm(None),
+    repeat_monthly: bool = FastAPIForm(False), day_of_month: Optional[int] = FastAPIForm(None),
     receipt: Optional[UploadFile] = File(None), current_user: dict = Depends(get_current_user),
 ):
     tenant = await _accounting_tenant(current_user)
@@ -12450,6 +12561,18 @@ async def create_expense(
         "description": description.strip()[:200], "date": date, "bank_account_id": bank_account_id, "receipt_url": receipt_url,
         "created_by": current_user["user_id"], "created_by_name": actor_name, "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    if repeat_monthly:
+        day = day_of_month or int(date[8:10])
+        if not 1 <= day <= 31:
+            raise HTTPException(status_code=400, detail="El día de pago debe estar entre 1 y 31")
+        template = {
+            "id": str(uuid.uuid4()), "tenant_id": tid, "amount": amount, "category": cat["key"], "category_label": cat["label"],
+            "description": expense["description"], "bank_account_id": bank_account_id, "day_of_month": day, "active": True,
+            # This month is covered by the expense being registered now; pending copies start next month.
+            "start_month": _next_period(date[:7]), "created_by": current_user["user_id"], "created_at": expense["created_at"],
+        }
+        await db.recurring_expenses.insert_one(dict(template))
+        expense.update({"recurring_id": template["id"], "period": date[:7]})
     await db.expenses.insert_one(dict(expense))
     await _sync_expense_ledger(tid, expense, current_user)
     await log_audit_action(tenant_id=tid, user_id=current_user["user_id"], user_name=actor_name, user_role="admin",
@@ -12539,7 +12662,7 @@ async def accounting_summary(start: str, end: str, start_day: str, end_day: str,
         paca_comm += v
         add(bkey(ps.get("created_at")), "income", v)
 
-    expenses = await db.expenses.find({"tenant_id": tid, "is_deleted": {"$ne": True}, "date": {"$gte": start_day, "$lte": end_day}},
+    expenses = await db.expenses.find({"tenant_id": tid, "is_deleted": {"$ne": True}, "status": {"$ne": "pending"}, "date": {"$gte": start_day, "$lte": end_day}},
                                       {"_id": 0, "amount": 1, "category": 1, "date": 1}).to_list(None)
     cats = {c["key"]: c for c in _expense_categories(tenant)}
     by_cat = {}

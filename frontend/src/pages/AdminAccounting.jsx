@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Plus, FileDown, Settings2, TrendingUp, TrendingDown, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, FileDown, Settings2, Repeat, TrendingUp, TrendingDown, Wallet } from "lucide-react";
 import { useAuth } from "@/App";
 import { Button } from "@/components/ui/button";
 import { getAccountingSummary, getExpenses, getExpenseCategories, listBankAccounts, deleteExpense } from "@/lib/api";
@@ -9,6 +9,8 @@ import { generateAccountingPDF } from "@/lib/accountingPDF";
 import { ExpenseFormDialog } from "@/components/accounting/ExpenseFormDialog";
 import { ExpenseList } from "@/components/accounting/ExpenseList";
 import { CategoryManager } from "@/components/accounting/CategoryManager";
+import { PendingExpenses } from "@/components/accounting/PendingExpenses";
+import { RecurringManager } from "@/components/accounting/RecurringManager";
 import { IncomeExpenseChart, CategoryDonut } from "@/components/accounting/AccountingCharts";
 import { money } from "@/components/accounting/categoryIcons";
 
@@ -52,6 +54,8 @@ export default function AdminAccounting() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [catsOpen, setCatsOpen] = useState(false);
+  const [pending, setPending] = useState([]);
+  const [recurringOpen, setRecurringOpen] = useState(false);
   const range = useMemo(() => periodRange(mode, offset), [mode, offset]);
 
   const load = useCallback(async () => {
@@ -59,9 +63,9 @@ export default function AdminAccounting() {
     try {
       const [s, e] = await Promise.all([
         getAccountingSummary({ ...params, tz_offset_minutes: new Date().getTimezoneOffset() }),
-        getExpenses({ start_day: params.start_day, end_day: params.end_day }),
+        getExpenses({ start_day: params.start_day, end_day: params.end_day, today: ymd(new Date()) }),
       ]);
-      setSummary(s.data); setExpenses(e.data.expenses);
+      setSummary(s.data); setExpenses(e.data.expenses); setPending(e.data.pending || []);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Error al cargar contabilidad");
     }
@@ -88,12 +92,15 @@ export default function AdminAccounting() {
             <p className="text-sm text-slate-500">Ganancias del sistema menos gastos del negocio</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" className="rounded-xl gap-1" onClick={() => setRecurringOpen(true)} data-testid="accounting-recurring-btn"><Repeat className="h-4 w-4" />Gastos fijos</Button>
             <Button variant="outline" className="rounded-xl gap-1" onClick={() => setCatsOpen(true)} data-testid="accounting-categories-btn"><Settings2 className="h-4 w-4" />Categorías</Button>
             <Button variant="outline" className="rounded-xl gap-1" disabled={!summary} data-testid="accounting-pdf-btn"
               onClick={() => generateAccountingPDF({ tenantName: user?.tenant_name, periodLabel: range.label, summary, expenses, accounts })}><FileDown className="h-4 w-4" />PDF</Button>
             <Button className="rounded-xl gap-1 bg-rose-500 hover:bg-rose-600 text-white" onClick={() => { setEditing(null); setFormOpen(true); }} data-testid="accounting-new-expense-btn"><Plus className="h-4 w-4" />Nuevo gasto</Button>
           </div>
         </div>
+
+        <PendingExpenses pending={pending} categories={categories} accounts={accounts} onChanged={load} />
 
         <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex rounded-2xl bg-white border border-slate-200 p-1">
@@ -161,6 +168,7 @@ export default function AdminAccounting() {
       </div>
 
       <ExpenseFormDialog open={formOpen} onOpenChange={setFormOpen} categories={categories} accounts={accounts} editing={editing} onSaved={load} />
+      <RecurringManager open={recurringOpen} onOpenChange={setRecurringOpen} categories={categories} accounts={accounts} onChanged={load} />
       <CategoryManager open={catsOpen} onOpenChange={setCatsOpen} categories={categories} onSaved={setCategories} />
     </div>
   );

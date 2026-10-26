@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, Paperclip, X } from "lucide-react";
+import { Loader2, Paperclip, X, Repeat } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,7 @@ import { createExpense, updateExpense } from "@/lib/api";
 import { iconFor } from "./categoryIcons";
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-const empty = () => ({ amount: "", category: "", description: "", date: today(), bank_account_id: "none" });
+const empty = () => ({ amount: "", category: "", description: "", date: today(), bank_account_id: "none", repeat: false, day: "" });
 
 export const ExpenseFormDialog = ({ open, onOpenChange, categories, accounts, editing, onSaved }) => {
   const [form, setForm] = useState(empty());
@@ -38,6 +39,10 @@ export const ExpenseFormDialog = ({ open, onOpenChange, categories, accounts, ed
         fd.append("description", form.description);
         fd.append("date", form.date);
         if (bank) fd.append("bank_account_id", bank);
+        if (form.repeat) {
+          fd.append("repeat_monthly", "true");
+          fd.append("day_of_month", String(parseInt(form.day, 10) || Number(form.date.slice(8, 10))));
+        }
         if (file) fd.append("receipt", file);
         await createExpense(fd);
       }
@@ -94,6 +99,21 @@ export const ExpenseFormDialog = ({ open, onOpenChange, categories, accounts, ed
               </SelectContent>
             </Select>
           </div>
+          {!editing && (
+            <div className={`rounded-2xl border p-3 transition-colors duration-150 ${form.repeat ? "border-indigo-200 bg-indigo-50" : "border-slate-100"}`} data-testid="expense-repeat-box">
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className="flex items-center gap-2 text-sm font-medium text-slate-700"><Repeat className="h-4 w-4 text-indigo-500" />Repetir cada mes (gasto fijo)</span>
+                <Switch checked={form.repeat} onCheckedChange={(v) => setForm((f) => ({ ...f, repeat: v, day: f.day || String(Number(f.date.slice(8, 10))) }))} data-testid="expense-repeat-switch" />
+              </label>
+              {form.repeat && (
+                <div className="flex items-center gap-2 mt-3 text-sm text-slate-600">
+                  Día de pago
+                  <Input type="number" min="1" max="31" value={form.day} onChange={(e) => set("day", e.target.value)} onWheel={(e) => e.target.blur()} className="h-8 w-16 rounded-lg text-center" data-testid="expense-repeat-day" />
+                  <span className="text-xs text-slate-400">de cada mes · se crea pendiente para que lo confirmes</span>
+                </div>
+              )}
+            </div>
+          )}
           {!editing && (
             file ? (
               <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm" data-testid="expense-file-chip">

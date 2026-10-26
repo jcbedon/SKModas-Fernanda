@@ -305,5 +305,9 @@ export const getExpenses = (params) => api.get("/accounting/expenses", { params 
 export const createExpense = (formData) => api.post("/accounting/expenses", formData, { headers: { "Content-Type": "multipart/form-data" } });
 export const updateExpense = (id, data) => api.put(`/accounting/expenses/${id}`, data);
 export const deleteExpense = (id) => api.delete(`/accounting/expenses/${id}`);
+export const confirmExpense = (id, data = {}) => api.post(`/accounting/expenses/${id}/confirm`, data);
+export const getRecurringExpenses = () => api.get("/accounting/recurring");
+export const updateRecurringExpense = (id, data) => api.put(`/accounting/recurring/${id}`, data);
+export const deleteRecurringExpense = (id) => api.delete(`/accounting/recurring/${id}`);
 export const getExpenseCategories = () => api.get("/accounting/categories");
 export const updateExpenseCategories = (categories) => api.put("/accounting/categories", { categories });
